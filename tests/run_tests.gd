@@ -141,22 +141,115 @@ func test_enemy_moves_down_and_ally_moves_up() -> void:
 	_check(ally.position.y < ally_y - 20.0, "ally should move up (%f -> %f)" % [ally_y, ally.position.y])
 
 
-func test_ally_stops_at_top_and_enemy_stops_at_base_line() -> void:
+func test_soldier_returns_to_rally_point_when_field_is_clear() -> void:
 	var b := await _start_battle()
-	var ally := _ally(Vector2(60, b.layout.ally_stop_y + 30.0))
+	var soldier := _ally(Vector2(60, b.layout.spawn_y + 60.0))
+	await _seconds(12.0)
+	var rally := Vector2(b.layout.center_x(), b.layout.rally_y)
+	_check(soldier.position.distance_to(rally) <= UnitBase.HOME_SPREAD + 15.0,
+			"soldier gathers near the base center (%s vs %s)" % [soldier.position, rally])
+	_check(soldier.state == Combatant.State.IDLE, "soldier idles once home")
+	# It goes out to fight, then comes back.
+	var far_enemy := _enemy(Vector2(195, b.layout.spawn_y + 10.0))
+	far_enemy.data = GRUNT.duplicate()
+	far_enemy.data.move_speed = 0.0
 	await _seconds(2.0)
-	_check(is_equal_approx(ally.position.y, b.layout.ally_stop_y), "ally should hold at top line")
-	_check(ally.state == Combatant.State.IDLE, "ally idles with no enemies")
-	ally.take_damage(9999)
-	await _frames(2)
+	_check(soldier.position.distance_to(rally) <= UnitBase.HOME_SPREAD + 15.0,
+			"soldier waits while the enemy is beyond the front line")
+	far_enemy.take_damage(9999)
+	var enemy := _enemy(Vector2(195, b.layout.assault_limit_y + 30.0))
+	await _seconds(3.0)
+	_check(soldier.position.y < rally.y - 100.0, "soldier advances to meet an enemy past the front line")
+	enemy.take_damage(9999)
+	await _seconds(12.0)
+	_check(soldier.position.distance_to(rally) <= UnitBase.HOME_SPREAD + 15.0, "soldier returns after the kill")
+
+
+func test_enemy_stops_at_base_line() -> void:
+	var b := await _start_battle()
 	var enemy := _enemy(Vector2(330, b.layout.base_line_y - 30.0))
 	await _seconds(2.0)
 	_check(is_equal_approx(enemy.position.y, b.layout.base_line_y), "enemy should hold at base line")
 
 
+func test_shields_hold_evenly_spread_posts_on_the_defense_line() -> void:
+	var b := await _start_battle()
+	var shields: Array[UnitBase] = []
+	for i in 3:
+		shields.append(_ally(Vector2(195, b.layout.ally_spawn_y), SHIELD))
+	_enemy(Vector2(195, b.layout.spawn_y + 20.0))  # Far up the field: not the shields' business.
+	await _seconds(8.0)
+	var xs := []
+	for sh in shields:
+		_check(absf(sh.position.y - b.layout.guard_y) < 4.0, "shield stays on the defense line (y=%.0f)" % sh.position.y)
+		xs.append(roundi(sh.position.x))
+	xs.sort()
+	var w := b.layout.right - b.layout.left
+	_check(absf(xs[0] - w * 0.25) < 4 and absf(xs[1] - w * 0.5) < 4 and absf(xs[2] - w * 0.75) < 4,
+			"posts at 1/4, 1/2, 3/4 of the width: %s" % [xs])
+
+
+func test_shield_engages_enemies_near_base_and_returns() -> void:
+	var b := await _start_battle()
+	var shield := _ally(Vector2(195, b.layout.guard_y), SHIELD)
+	await _seconds(1.0)
+	var post := shield.get_station()
+	var enemy := _enemy(Vector2(post.x + 70.0, b.layout.base_line_y - 10.0))
+	await _seconds(1.5)
+	_check(shield.target == enemy, "shield engages an enemy near the base")
+	_check(enemy.hp < enemy.max_hp, "and hits it")
+	enemy.take_damage(9999)
+	await _seconds(4.0)
+	_check(shield.position.distance_to(post) < 4.0, "shield returns to its post")
+
+
+func test_shield_protects_ally_under_attack() -> void:
+	var b := await _start_battle()
+	var shield := _ally(Vector2(195, b.layout.guard_y), SHIELD)
+	await _seconds(1.0)
+	# An archer a little ahead of the line is attacked by an enemy outside the guard radius.
+	var archer := _ally(Vector2(195, b.layout.guard_y - 140.0), ARCHER)
+	var enemy := _enemy(Vector2(195, b.layout.guard_y - 175.0))
+	enemy.data = GRUNT.duplicate()
+	enemy.data.move_speed = 0.0
+	await _seconds(1.0)
+	_check(enemy.target == archer, "setup: the enemy is attacking the archer (%s)" % [enemy.target])
+	_check(shield.target == enemy, "shield moves in to protect the archer")
+
+
+func test_archers_stay_behind_engaged_soldiers() -> void:
+	var b := await _start_battle()
+	var enemy := _enemy(Vector2(195, b.layout.rally_y - 220.0))
+	enemy.data = GRUNT.duplicate()
+	enemy.data.move_speed = 0.0
+	enemy.max_hp = 100000
+	enemy.hp = 100000
+	enemy._attack_cooldown = 1000.0
+	var soldier := _ally(Vector2(195, enemy.position.y + 40.0))
+	var archer := _ally(Vector2(160, b.layout.ally_spawn_y), ARCHER)
+	await _seconds(6.0)
+	_check(soldier.target == enemy, "soldier engages")
+	_check(archer.position.y >= soldier.position.y + 50.0,
+			"archer stands behind the soldier (archer y %.0f, soldier y %.0f)" % [archer.position.y, soldier.position.y])
+	_check(archer.position.y >= b.layout.archer_limit_y - 1.0, "archer never passes its forward limit")
+	_check(archer.state == Combatant.State.ATTACK, "archer shoots from behind")
+
+
+func test_archer_does_not_chase_out_of_range() -> void:
+	var b := await _start_battle()
+	var archer := _ally(Vector2(195, b.layout.ally_spawn_y), ARCHER)
+	await _seconds(2.0)
+	var home := archer.position
+	var enemy := _enemy(Vector2(195, b.layout.spawn_y + 20.0))
+	enemy.data = GRUNT.duplicate()  # Never edit the shared resource.
+	enemy.data.move_speed = 0.0
+	await _seconds(3.0)
+	_check(archer.position.distance_to(home) < 4.0, "archer holds its position without soldiers to cover it")
+
+
 func test_allies_hunt_enemies_that_slipped_past() -> void:
 	var b := await _start_battle()
-	var ally := _ally(Vector2(40, b.layout.ally_stop_y))
+	var ally := _ally(Vector2(40, b.layout.spawn_y + 40.0))
 	var enemy := _enemy(Vector2(350, b.layout.base_line_y - 10.0))
 	_check(ally.global_position.distance_to(enemy.global_position) > SOLDIER.aggro_range,
 			"setup: enemy starts out of aggro range")
@@ -395,20 +488,22 @@ func test_multi_summon_cost_and_cap() -> void:
 
 func test_archer_shoots_arrows_from_range() -> void:
 	var b := await _start_battle()
-	var enemy := _enemy(Vector2(195, 300))
+	var enemy := _enemy(Vector2(195, b.layout.rally_y - 200.0))
 	enemy.data = GRUNT.duplicate()
 	enemy.data.move_speed = 0.0  # Stationary target.
-	var archer := _ally(Vector2(195, 300 + 110), ARCHER)
+	enemy.max_hp = 100000
+	enemy.hp = 100000
+	_ally(Vector2(195, enemy.position.y + 40.0))  # A soldier to stand behind.
+	var archer := _ally(Vector2(195, b.layout.ally_spawn_y), ARCHER)
 	var saw_projectile := false
 	var hits := []
 	enemy.damaged.connect(func(_c: Combatant, amount: int) -> void: hits.append(amount))
-	for i in 150:
+	for i in 360:
 		await physics_frame
 		for child in b.effects.get_children():
 			saw_projectile = saw_projectile or child is Projectile
 	_check(saw_projectile, "archer fired a projectile")
-	_check(hits.size() >= 1, "arrow hit the enemy")
-	_check(hits.all(func(h: int) -> bool: return h == ARCHER.attack), "each arrow deals archer attack")
+	_check(hits.has(ARCHER.attack), "an arrow hit for the archer's attack (%s)" % [hits])
 	_check(archer.position.distance_to(enemy.position) > 60.0, "archer stays at range (dist %.0f)" % archer.position.distance_to(enemy.position))
 
 
@@ -663,8 +758,9 @@ func test_upgrade_drawer_by_touch() -> void:
 	_check(not b.battle_ui.is_upgrade_panel_open(), "tap closes drawer")
 
 
-## A reasonable player: keeps a mixed army (at most ~1/3 shields), always summons,
-## and buys the cheapest upgrade when at the unit cap or holding 150+ coins.
+## A reasonable player: keeps a mixed army (about half soldiers, then archers, a few
+## shields), always summons, and buys the cheapest upgrade when at the unit cap or
+## holding 150+ coins.
 func _play_balanced(b: BattleManager, limit: float) -> int:
 	var bought := 0
 	while b.phase != BattleManager.Phase.ENDED and b.clock.elapsed < limit:
@@ -676,18 +772,18 @@ func _play_balanced(b: BattleManager, limit: float) -> int:
 					best = i
 			if best >= 0 and b.request_upgrade(best) == BattleUpgradeManager.Reason.OK:
 				bought += 1
-		var allies := _count(&"allies")
-		var shields := 0
+		# Target mix ~ 50% soldiers, 30% archers, 20% shields.
+		var counts := {SOLDIER: 0, ARCHER: 0, SHIELD: 0}
 		for u in get_nodes_in_group(&"allies"):
-			if (u as UnitBase).data == SHIELD:
-				shields += 1
-		var order := [SLOT_SHIELD, SLOT_SOLDIER, SLOT_ARCHER] if shields * 4 < allies \
-				else [SLOT_SOLDIER, SLOT_ARCHER, SLOT_SHIELD]
-		for slot in order:
-			if slot == SLOT_SHIELD and shields * 3 > allies + 1:
-				continue
-			if b.summoner.check_summon(slot) == SummonManager.Reason.OK:
-				b.request_summon(slot)
+			counts[(u as UnitBase).data] += 1
+		var n := _count(&"allies") + 1
+		var want := [[SLOT_SOLDIER, counts[SOLDIER] / (0.5 * n)], [SLOT_ARCHER, counts[ARCHER] / (0.3 * n)],
+				[SLOT_SHIELD, counts[SHIELD] / (0.2 * n)]]
+		want.sort_custom(func(x: Array, y: Array) -> bool: return x[1] < y[1])
+		# Buy what's under its share; never over-buy just because it's affordable.
+		for w in want:
+			if (w[1] < 1.0 or w == want[0]) and b.summoner.check_summon(w[0]) == SummonManager.Reason.OK:
+				b.request_summon(w[0])
 		await _seconds(0.5)
 	return bought
 
@@ -711,14 +807,14 @@ func test_regular_spawn_curve() -> void:
 	var b := await _start_battle()
 	var sp := b.spawner
 	b.clock.elapsed = 0.0
-	_check(is_equal_approx(sp.current_interval(), 3.0) and sp.current_wave_size() == 1, "start: 1 enemy / 3s")
+	_check(is_equal_approx(sp.current_interval(), sp.start_interval) and sp.current_wave_size() == 1, "start: 1 enemy per wave")
 	_check(sp.current_strong_chance() == 0.0, "no strong enemies at start")
 	b.clock.elapsed = 89.0
 	_check(sp.current_strong_chance() == 0.0, "no strong enemies before 1:30")
 	b.clock.elapsed = 150.0
-	_check(sp.current_interval() < 3.0 and sp.current_wave_size() == 2, "faster, bigger waves later")
+	_check(sp.current_interval() < sp.start_interval and sp.current_wave_size() == 2, "faster, bigger waves later")
 	_check(sp.current_strong_chance() > 0.0, "strong enemies mixed in after 1:30")
-	_check(sp.current_stat_multiplier() > 1.3, "stats grow")
+	_check(sp.current_stat_multiplier() > 1.25, "stats grow")
 	b.clock.elapsed = 600.0
 	_check(sp.current_interval() == sp.min_interval and sp.current_wave_size() == sp.max_wave_size, "curve capped")
 	_check(sp.current_strong_chance() == sp.strong_max_chance, "strong share capped")
@@ -835,7 +931,7 @@ func test_final_boss_cleave_hits_clustered_allies() -> void:
 	var boss := b.spawner.spawn_enemy(DEMON_KING, 1.0, Vector2(195, 300), true)
 	var group: Array[UnitBase] = []
 	for i in 3:
-		group.append(_ally(Vector2(185 + i * 10, 300 + DEMON_KING.body_radius + 12), SHIELD))
+		group.append(_ally(Vector2(185 + i * 10, 300 + DEMON_KING.body_radius + 12)))
 	var far := _ally(Vector2(40, 300), SHIELD)
 	await _seconds(2.0)
 	var hurt := 0

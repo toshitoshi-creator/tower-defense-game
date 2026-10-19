@@ -95,10 +95,15 @@ func _physics_process(delta: float) -> void:
 		if _attack_cooldown <= 0.0:
 			_attack(target)
 	elif target != null:
-		_set_state(State.MOVE)
-		_move_toward(target.global_position, delta)
+		_approach(target, delta)
 	else:
 		_advance(delta)
+
+
+## Target known but out of reach. Default: walk straight at it.
+func _approach(other: Combatant, delta: float) -> void:
+	_set_state(State.MOVE)
+	_move_toward(other.global_position, delta)
 
 
 ## Called when no opponent is in aggro range. Default: walk forward.

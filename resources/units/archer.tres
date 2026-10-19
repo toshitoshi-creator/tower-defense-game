@@ -16,6 +16,7 @@ attack_range = 120.0
 aggro_range = 160.0
 attack_type = 1
 projectile_speed = 260.0
+role = 2
 summon_cost = 30
 reward = 0
 placeholder_pattern = &"archer"

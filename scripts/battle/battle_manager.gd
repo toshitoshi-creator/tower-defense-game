@@ -375,9 +375,13 @@ func _update_layout() -> void:
 	layout.left = 0.0
 	layout.right = view.x
 	layout.spawn_y = top + 14.0
-	layout.ally_stop_y = top + 36.0
 	var base_top := bottom - BaseController.HEIGHT
 	layout.base_line_y = base_top - 4.0
 	layout.ally_spawn_y = base_top - 14.0
+	layout.archer_home_y = layout.base_line_y - 30.0
+	layout.guard_y = layout.base_line_y - 75.0
+	layout.rally_y = layout.base_line_y - 125.0
+	layout.archer_limit_y = layout.guard_y - 170.0
+	layout.assault_limit_y = layout.guard_y - 300.0
 	base.place(0.0, base_top, view.x)
 	background.set_area(Rect2(0.0, 0.0, view.x, view.y), top, base_top)

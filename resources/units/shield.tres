@@ -16,6 +16,7 @@ attack_range = 4.0
 aggro_range = 100.0
 attack_type = 0
 projectile_speed = 260.0
+role = 1
 summon_cost = 25
 reward = 0
 placeholder_pattern = &"shield"

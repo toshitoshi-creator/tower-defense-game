@@ -16,19 +16,19 @@ const ENEMY_SCENE := preload("res://scenes/units/enemy_unit.tscn")
 ## Strong enemies start replacing grunts at this time...
 @export var strong_start_time: float = 90.0
 ## ...with this much more chance per minute after that...
-@export var strong_chance_per_minute: float = 0.08
+@export var strong_chance_per_minute: float = 0.06
 ## ...up to this share of a wave.
-@export var strong_max_chance: float = 0.25
+@export var strong_max_chance: float = 0.2
 ## Ordered by time.
 @export var boss_schedule: Array[BossSpawn] = []
 ## When false, only explicit spawn_enemy() calls create enemies (used by tests).
 @export var auto_spawn: bool = true
 ## Seconds between waves at 0:00.
-@export var start_interval: float = 3.0
-@export var min_interval: float = 1.0
-@export var interval_reduction_per_minute: float = 0.4
-## Enemy HP/attack multiplier added per minute (0.15 => x1.15 at 1:00).
-@export var stat_growth_per_minute: float = 0.15
+@export var start_interval: float = 3.5
+@export var min_interval: float = 1.3
+@export var interval_reduction_per_minute: float = 0.35
+## Enemy HP/attack multiplier added per minute (0.12 => x1.12 at 1:00).
+@export var stat_growth_per_minute: float = 0.12
 ## One more enemy per wave every N seconds...
 @export var extra_enemy_every: float = 70.0
 ## ...up to this many per wave.
