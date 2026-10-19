@@ -11,13 +11,13 @@ const ENEMY_SCENE := preload("res://scenes/units/enemy_unit.tscn")
 ## When false, only explicit spawn_enemy() calls create enemies (used by tests).
 @export var auto_spawn: bool = true
 ## Seconds between waves at 0:00.
-@export var start_interval: float = 2.4
+@export var start_interval: float = 3.0
 @export var min_interval: float = 0.7
-@export var interval_reduction_per_minute: float = 0.6
-## Enemy HP/attack multiplier added per minute (0.25 => x1.25 at 1:00).
-@export var stat_growth_per_minute: float = 0.25
+@export var interval_reduction_per_minute: float = 0.4
+## Enemy HP/attack multiplier added per minute (0.2 => x1.2 at 1:00).
+@export var stat_growth_per_minute: float = 0.2
 ## One more enemy per wave every N seconds.
-@export var extra_enemy_every: float = 50.0
+@export var extra_enemy_every: float = 70.0
 ## Hard cap on simultaneously alive enemies (performance guard).
 @export var max_alive: int = 60
 

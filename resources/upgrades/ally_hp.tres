@@ -1,0 +1,13 @@
+[gd_resource type="Resource" script_class="UpgradeData" load_steps=2 format=3]
+
+[ext_resource type="Script" path="res://scripts/data/upgrade_data.gd" id="1_data"]
+
+[resource]
+script = ExtResource("1_data")
+id = &"ally_hp"
+display_name = "最大HP"
+effect = 3
+base_cost = 40
+cost_growth = 1.5
+max_level = 10
+value_per_level = 0.15

@@ -1,4 +1,4 @@
-[gd_scene load_steps=16 format=3]
+[gd_scene load_steps=23 format=3]
 
 [ext_resource type="Script" path="res://scripts/battle/battle_manager.gd" id="1_manager"]
 [ext_resource type="Script" path="res://scripts/battle/battle_clock.gd" id="2_clock"]
@@ -13,6 +13,14 @@
 [ext_resource type="Resource" path="res://resources/units/archer.tres" id="12_archer"]
 [ext_resource type="Resource" path="res://resources/units/shield.tres" id="13_shield"]
 [ext_resource type="Script" path="res://scripts/data/unit_data.gd" id="14_unit_data"]
+[ext_resource type="Script" path="res://scripts/battle/battle_upgrade_manager.gd" id="15_upgrades"]
+[ext_resource type="Script" path="res://scripts/data/upgrade_data.gd" id="16_upgrade_data"]
+[ext_resource type="Resource" path="res://resources/upgrades/summon_speed.tres" id="17_up"]
+[ext_resource type="Resource" path="res://resources/upgrades/summon_count.tres" id="18_up"]
+[ext_resource type="Resource" path="res://resources/upgrades/ally_attack.tres" id="19_up"]
+[ext_resource type="Resource" path="res://resources/upgrades/ally_hp.tres" id="20_up"]
+[ext_resource type="Resource" path="res://resources/upgrades/base_hp.tres" id="21_up"]
+[ext_resource type="Resource" path="res://resources/upgrades/coin_gain.tres" id="22_up"]
 [ext_resource type="PackedScene" path="res://scenes/ui/result_ui.tscn" id="10_result"]
 
 [node name="Battle" type="Node2D"]
@@ -44,6 +52,10 @@ grunt_data = ExtResource("7_grunt")
 [node name="SummonManager" type="Node" parent="."]
 script = ExtResource("6_summon")
 roster = Array[ExtResource("14_unit_data")]([ExtResource("8_soldier"), ExtResource("12_archer"), ExtResource("13_shield")])
+
+[node name="BattleUpgradeManager" type="Node" parent="."]
+script = ExtResource("15_upgrades")
+upgrades = Array[ExtResource("16_upgrade_data")]([ExtResource("17_up"), ExtResource("18_up"), ExtResource("19_up"), ExtResource("20_up"), ExtResource("21_up"), ExtResource("22_up")])
 
 [node name="BattleUI" parent="." instance=ExtResource("9_ui")]
 

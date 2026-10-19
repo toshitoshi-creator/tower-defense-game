@@ -54,6 +54,15 @@ func add_max_hp(amount: int) -> void:
 	hp_changed.emit(hp, max_hp)
 
 
+## Green pulse when durability is upgraded.
+func play_upgrade_flash() -> void:
+	if _flash_tween != null:
+		_flash_tween.kill()
+	modulate = Color(0.7, 1.8, 0.8)
+	_flash_tween = create_tween()
+	_flash_tween.tween_property(self, "modulate", Color.WHITE, 0.4)
+
+
 func take_damage(amount: int) -> int:
 	if _destroyed or amount <= 0:
 		return 0

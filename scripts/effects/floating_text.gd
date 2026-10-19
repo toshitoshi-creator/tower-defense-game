@@ -7,6 +7,7 @@ const MAX_ACTIVE := 40
 const COLOR_DAMAGE_TO_ENEMY := Color(1.0, 0.95, 0.5)
 const COLOR_DAMAGE_TO_ALLY := Color(1.0, 0.55, 0.45)
 const COLOR_COIN := Color(1.0, 0.82, 0.2)
+const COLOR_UPGRADE := Color(0.5, 1.0, 0.55)
 
 static var _active: int = 0
 

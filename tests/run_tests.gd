@@ -12,6 +12,12 @@ const GRUNT: UnitData = preload("res://resources/enemies/grunt.tres")
 const SLOT_SOLDIER := 0
 const SLOT_ARCHER := 1
 const SLOT_SHIELD := 2
+const UP_SPEED := 0
+const UP_COUNT := 1
+const UP_ATTACK := 2
+const UP_HP := 3
+const UP_BASE := 4
+const UP_COIN := 5
 const FPS := 60
 
 var _failures: Array[String] = []
@@ -486,6 +492,177 @@ func _tap(at: Vector2) -> void:
 	await _frames(2)
 
 
+func test_upgrade_cost_formula() -> void:
+	var b := await _start_battle()
+	var speed: UpgradeData = b.upgrades.upgrades[UP_SPEED]
+	var costs := []
+	for lv in 4:
+		costs.append(BattleUpgradeManager.cost_for_level(speed, lv))
+	_check(costs == [50, 75, 113, 169], "50 * 1.5^lv rounded, got %s" % [costs])
+	var expected_base := {UP_SPEED: 50, UP_COUNT: 100, UP_ATTACK: 40, UP_HP: 40, UP_BASE: 60, UP_COIN: 80}
+	for i in expected_base:
+		_check(b.upgrades.get_next_cost(i) == expected_base[i], "initial cost of %s" % b.upgrades.upgrades[i].id)
+	b.wallet.coins = 1000
+	b.request_upgrade(UP_ATTACK)
+	_check(b.wallet.coins == 960 and b.upgrades.get_next_cost(UP_ATTACK) == 60, "cost rises after purchase")
+
+
+func test_upgrade_refused_without_coins_or_at_max() -> void:
+	var b := await _start_battle()
+	b.wallet.coins = 39
+	_check(b.request_upgrade(UP_ATTACK) == BattleUpgradeManager.Reason.NOT_ENOUGH_COINS, "refused")
+	_check(b.upgrades.get_level(UP_ATTACK) == 0 and b.wallet.coins == 39, "nothing applied or spent")
+	_check(b.summoner.ally_attack_multiplier == 1.0, "effect not applied")
+	_check(b.battle_ui.toast.text == "コインが足りません", "reason shown")
+	b.wallet.coins = 10000
+	for i in 3:
+		_check(b.request_upgrade(UP_COUNT) == BattleUpgradeManager.Reason.OK, "count level %d" % (i + 1))
+	var coins := b.wallet.coins
+	_check(b.request_upgrade(UP_COUNT) == BattleUpgradeManager.Reason.MAX_LEVEL, "max level refused")
+	_check(b.wallet.coins == coins and b.upgrades.get_level(UP_COUNT) == 3, "no charge at max")
+	_check(b.upgrades.get_next_cost(UP_COUNT) == -1, "maxed cost is -1")
+	await _frames(8)
+	_check(b.battle_ui.upgrade_buttons[UP_COUNT].cost_label.text == "MAX", "button shows MAX")
+
+
+func test_summon_speed_upgrade() -> void:
+	var b := await _start_battle()
+	b.wallet.coins = 10000
+	b.request_upgrade(UP_SPEED)
+	_check(is_equal_approx(b.summoner.get_interval(), 4.25), "lv1 interval 4.25s, got %f" % b.summoner.get_interval())
+	b.request_summon(SLOT_SOLDIER)
+	_check(is_equal_approx(b.summoner.get_cooldown_remaining(SLOT_SOLDIER), 4.25), "new cooldown uses upgraded interval")
+	for i in 4:
+		b.request_upgrade(UP_SPEED)
+	_check(b.upgrades.is_maxed(UP_SPEED), "speed maxed at 5")
+	_check(b.summoner.get_interval() >= SummonManager.MIN_INTERVAL, "never below the floor")
+	_check(is_equal_approx(b.summoner.get_interval(), 1.25), "lv5 interval 1.25s, got %f" % b.summoner.get_interval())
+
+
+func test_summon_count_upgrade_applies_from_next_summon() -> void:
+	var b := await _start_battle()
+	b.wallet.coins = 1000
+	b.request_summon(SLOT_SOLDIER)
+	_check(_count(&"allies") == 1, "one before upgrade")
+	b.request_upgrade(UP_COUNT)
+	_check(_count(&"allies") == 1, "upgrade does not spawn extra units")
+	_check(b.summoner.get_summon_cost(SLOT_ARCHER) == 60, "2 archers cost 60")
+	var coins := b.wallet.coins
+	b.request_summon(SLOT_ARCHER)
+	_check(_count(&"allies") == 3 and b.wallet.coins == coins - 60, "2 archers summoned for 60")
+	await _frames(8)
+	_check(b.battle_ui.summon_buttons[SLOT_SOLDIER].count_label.text == "×2", "button shows ×2")
+	_check(b.battle_ui.summon_buttons[SLOT_SOLDIER].cost_label.text == "40G", "button shows total cost")
+
+
+func test_attack_upgrade_reaches_living_and_new_allies() -> void:
+	var b := await _start_battle()
+	b.wallet.coins = 1000
+	var old_unit := _ally(Vector2(100, 600))
+	_check(old_unit.attack_power == 15, "base attack 15")
+	b.request_upgrade(UP_ATTACK)
+	_check(old_unit.attack_power == 17, "living soldier 15 * 1.15 -> 17, got %d" % old_unit.attack_power)
+	var ups := 0
+	for child in b.effects.get_children():
+		if child is FloatingText and (child as Label).text == "UP":
+			ups += 1
+	_check(ups == 1, "an UP popup marks the boosted ally (%d)" % ups)
+	var new_unit := _ally(Vector2(300, 600))
+	_check(new_unit.attack_power == 17, "new soldier gets it too")
+	var enemy := _enemy(Vector2(100, 560))
+	var hits := []
+	enemy.damaged.connect(func(_c: Combatant, amount: int) -> void: hits.append(amount))
+	await _seconds(1.5)
+	_check(hits.size() > 0 and hits[0] == 17, "upgraded hit deals 17 (%s)" % [hits])
+
+
+func test_hp_upgrade_raises_living_allies_without_full_heal() -> void:
+	var b := await _start_battle()
+	b.wallet.coins = 1000
+	var unit := _ally(Vector2(100, 600))
+	unit.take_damage(40)
+	_check(unit.hp == 60, "damaged to 60/100")
+	b.request_upgrade(UP_HP)
+	_check(unit.max_hp == 115 and unit.hp == 75, "max 115, hp 60+15=75, got %d/%d" % [unit.hp, unit.max_hp])
+	var fresh := _ally(Vector2(300, 600), SHIELD)
+	_check(fresh.max_hp == 253 and fresh.hp == 253, "new shield 220*1.15=253, got %d" % fresh.max_hp)
+
+
+func test_base_upgrade_adds_max_and_current() -> void:
+	var b := await _start_battle()
+	b.wallet.coins = 1000
+	b.base.take_damage(100)
+	b.request_upgrade(UP_BASE)
+	_check(b.base.max_hp == 1200 and b.base.hp == 1100, "900/1000 -> 1100/1200, got %d/%d" % [b.base.hp, b.base.max_hp])
+	_check(b.battle_ui.base_hp_label.text == "陣地 1100 / 1200", "HUD shows new durability")
+	_check(b.battle_ui.toast.text.begins_with("陣地耐久 Lv1"), "effect announced: %s" % b.battle_ui.toast.text)
+
+
+func test_coin_gain_upgrade_raises_kill_rewards() -> void:
+	var b := await _start_battle()
+	b.wallet.coins = 1000
+	b.request_upgrade(UP_COIN)
+	var before := b.wallet.coins
+	_enemy(Vector2(100, 300)).take_damage(9999)
+	await _frames(1)
+	_check(b.wallet.coins - before == 6, "5 * 1.2 = 6 coins, got %d" % (b.wallet.coins - before))
+
+
+func test_upgrade_refused_after_battle_end() -> void:
+	var b := await _start_battle()
+	b.wallet.coins = 1000
+	b.base.take_damage(b.base.hp)
+	await _frames(2)
+	_check(b.request_upgrade(UP_ATTACK) == BattleUpgradeManager.Reason.BATTLE_OVER, "refused after end")
+	_check(b.upgrades.get_level(UP_ATTACK) == 0, "level unchanged")
+	_check(not b.battle_ui.is_upgrade_panel_open(), "drawer closed on result screen")
+
+
+func test_upgrade_drawer_by_touch() -> void:
+	var b := await _start_battle()
+	b.wallet.coins = 1000
+	_check(not b.battle_ui.is_upgrade_panel_open(), "drawer starts closed")
+	await _tap(b.battle_ui.upgrade_toggle.get_global_rect().get_center())
+	_check(b.battle_ui.is_upgrade_panel_open(), "tap opens drawer")
+	await _frames(2)
+	var view := b.get_viewport_rect()
+	var bottom := b.battle_ui.bottom_panel.get_global_rect()
+	for button in b.battle_ui.upgrade_buttons:
+		var r := button.get_global_rect()
+		_check(view.encloses(r), "upgrade button on screen")
+		_check(r.size.y >= 48.0, "upgrade button >= 48px tall")
+		_check(r.end.y <= bottom.position.y + 0.5, "drawer sits above the bottom panel")
+	await _tap(b.battle_ui.upgrade_buttons[UP_ATTACK].get_global_rect().get_center())
+	_check(b.upgrades.get_level(UP_ATTACK) == 1, "tap on upgrade buys it")
+	_check(b.phase == BattleManager.Phase.RUNNING and not paused, "battle keeps running with drawer open")
+	await _tap(b.battle_ui.upgrade_toggle.get_global_rect().get_center())
+	_check(not b.battle_ui.is_upgrade_panel_open(), "tap closes drawer")
+
+
+func test_upgrading_player_outlasts_and_buys_upgrades() -> void:
+	# Bot: always summons; at the unit cap or with coins piling up, buys the cheapest upgrade.
+	var b := await _start_battle(false)
+	var limit := 8.0 * 60.0
+	var bought := 0
+	while b.phase != BattleManager.Phase.ENDED and b.clock.elapsed < limit:
+		if b.summoner.get_free_capacity() < 3 or b.wallet.coins >= 150:
+			var best := -1
+			for i in b.upgrades.upgrades.size():
+				var c := b.upgrades.get_next_cost(i)
+				if c > 0 and (best < 0 or c < b.upgrades.get_next_cost(best)):
+					best = i
+			if best >= 0 and b.request_upgrade(best) == BattleUpgradeManager.Reason.OK:
+				bought += 1
+		for slot in [SLOT_SHIELD, SLOT_SOLDIER, SLOT_ARCHER]:
+			if b.summoner.check_summon(slot) == SummonManager.Reason.OK:
+				b.request_summon(slot)
+		await _seconds(0.5)
+	print("        upgrade bot: ended=%s at %s, kills=%d, upgrades bought=%d" % [
+			b.phase == BattleManager.Phase.ENDED, BattleClock.format_time(b.clock.elapsed), b.kills, bought])
+	_check(bought >= 5, "bot bought upgrades (%d)" % bought)
+	_check(b.clock.elapsed >= 240.0, "upgrading player lasts 4+ minutes (%.0fs)" % b.clock.elapsed)
+
+
 func test_victory_beats_defeat_in_same_frame() -> void:
 	var b := await _start_battle()
 	b.base.take_damage(b.base.hp)
@@ -611,6 +788,10 @@ func _collect_files(dir_path: String, exts: Array) -> Array[String]:
 func test_retry_reloads_fresh_battle() -> void:
 	var b := await _start_battle(false)
 	await _seconds(3.0)
+	b.wallet.coins = 5000
+	for i in b.upgrades.upgrades.size():
+		b.request_upgrade(i)
+	b.request_summon(SLOT_SOLDIER)
 	b.base.take_damage(b.base.hp)
 	await _frames(2)
 	_check(b.phase == BattleManager.Phase.ENDED, "ended before retry")
@@ -628,3 +809,10 @@ func test_retry_reloads_fresh_battle() -> void:
 	_check(fresh.world.process_mode == Node.PROCESS_MODE_INHERIT, "world active again")
 	_check(not fresh.result_ui.panel.visible, "result screen hidden")
 	_check(not paused, "tree not paused")
+	for i in fresh.upgrades.upgrades.size():
+		_check(fresh.upgrades.get_level(i) == 0, "upgrade %d reset" % i)
+	_check(fresh.summoner.count_per_summon == 1 and fresh.summoner.interval_multiplier == 1.0, "summon upgrades reset")
+	_check(fresh.summoner.ally_attack_multiplier == 1.0 and fresh.summoner.ally_hp_multiplier == 1.0, "ally upgrades reset")
+	_check(fresh.wallet.reward_multiplier == 1.0, "coin upgrade reset")
+	_check(fresh.wallet.coins == fresh.wallet.starting_coins, "coins reset")
+	_check(_count(&"allies") == 0, "no allies carried over")

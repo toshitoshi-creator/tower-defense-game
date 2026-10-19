@@ -34,6 +34,7 @@ var _ui_refresh_timer: float = 0.0
 @onready var effects: Node2D = $World/Effects
 @onready var spawner: EnemySpawner = $EnemySpawner
 @onready var summoner: SummonManager = $SummonManager
+@onready var upgrades: BattleUpgradeManager = $BattleUpgradeManager
 @onready var battle_ui: BattleUI = $BattleUI
 @onready var result_ui: ResultUI = $ResultUI
 
@@ -42,7 +43,9 @@ func _ready() -> void:
 	get_tree().paused = false
 	spawner.setup(clock, layout, units, effects, base)
 	summoner.setup(wallet, layout, units, effects)
+	upgrades.setup(wallet, summoner, base)
 	battle_ui.setup_summon_buttons(summoner.roster)
+	battle_ui.setup_upgrade_buttons(upgrades.upgrades)
 
 	spawner.enemy_spawned.connect(_on_enemy_spawned)
 	base.destroyed.connect(_on_base_destroyed)
@@ -52,6 +55,9 @@ func _ready() -> void:
 	summoner.summoned.connect(_on_summoned)
 	summoner.summon_rejected.connect(_on_summon_rejected)
 	battle_ui.summon_slot_pressed.connect(request_summon)
+	battle_ui.upgrade_pressed.connect(request_upgrade)
+	upgrades.upgraded.connect(_on_upgraded)
+	upgrades.upgrade_rejected.connect(_on_upgrade_rejected)
 	clock.second_elapsed.connect(func(_s: int) -> void: battle_ui.set_time(clock.elapsed))
 	battle_ui.pause_requested.connect(set_paused.bind(true))
 	battle_ui.resume_requested.connect(set_paused.bind(false))
@@ -73,6 +79,7 @@ func start_battle() -> void:
 	wallet.active = true
 	spawner.start()
 	summoner.start()
+	upgrades.start()
 	_refresh_summon_ui()
 	battle_started.emit()
 
@@ -102,6 +109,7 @@ func _request_end(requested: Result) -> void:
 		wallet.active = false
 		spawner.stop()
 		summoner.stop()
+		upgrades.stop()
 		_resolve_end.call_deferred()
 
 
@@ -113,6 +121,7 @@ func _resolve_end() -> void:
 	_pending_results.clear()
 	# Freeze every unit, attack and tween on the field.
 	world.process_mode = Node.PROCESS_MODE_DISABLED
+	battle_ui.set_upgrade_panel_open(false)
 	battle_ui.set_time(clock.elapsed)
 	result_ui.show_result(result == Result.VICTORY, {
 		"time": clock.elapsed,
@@ -129,6 +138,14 @@ func request_summon(slot: int) -> SummonManager.Reason:
 		_on_summon_rejected(slot, SummonManager.Reason.BATTLE_OVER)
 		return SummonManager.Reason.BATTLE_OVER
 	return summoner.try_summon(slot)
+
+
+## Entry point for upgrade taps (UI) — the upgrade manager validates everything.
+func request_upgrade(index: int) -> BattleUpgradeManager.Reason:
+	if phase != Phase.RUNNING:
+		_on_upgrade_rejected(index, BattleUpgradeManager.Reason.BATTLE_OVER)
+		return BattleUpgradeManager.Reason.BATTLE_OVER
+	return upgrades.try_upgrade(index)
 
 
 func retry() -> void:
@@ -180,6 +197,23 @@ func _on_summon_rejected(slot: int, reason: SummonManager.Reason) -> void:
 	battle_ui.show_summon_result(slot, false, SummonManager.REASON_TEXT.get(reason, ""))
 
 
+func _on_upgraded(index: int, _level: int) -> void:
+	battle_ui.show_upgrade_result(index, true, upgrades.describe_purchase(index))
+	match upgrades.upgrades[index].effect:
+		UpgradeData.Effect.ALLY_ATTACK, UpgradeData.Effect.ALLY_HP:
+			# Show the boost on every ally it reached (FloatingText caps the count).
+			for node in get_tree().get_nodes_in_group(&"allies"):
+				FloatingText.spawn(effects, (node as Node2D).global_position + Vector2(0, -30), "UP",
+						FloatingText.COLOR_UPGRADE)
+		UpgradeData.Effect.BASE_HP:
+			base.play_upgrade_flash()
+	_refresh_summon_ui()
+
+
+func _on_upgrade_rejected(index: int, reason: BattleUpgradeManager.Reason) -> void:
+	battle_ui.show_upgrade_result(index, false, BattleUpgradeManager.REASON_TEXT.get(reason, ""))
+
+
 func _process(delta: float) -> void:
 	if phase != Phase.RUNNING:
 		return
@@ -190,6 +224,12 @@ func _process(delta: float) -> void:
 
 
 func _refresh_summon_ui() -> void:
+	for i in upgrades.upgrades.size():
+		var level := upgrades.get_level(i)
+		var cost := upgrades.get_next_cost(i)
+		battle_ui.refresh_upgrade_button(i, upgrades.upgrades[i].display_name, level,
+				upgrades.describe_level(i, level), upgrades.describe_level(i, level + 1),
+				cost, cost >= 0 and wallet.can_afford(cost))
 	for slot in summoner.roster.size():
 		var cost := summoner.get_summon_cost(slot)
 		battle_ui.refresh_summon_button(slot, cost, maxi(1, summoner.get_summon_count()),

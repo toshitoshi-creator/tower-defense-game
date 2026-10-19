@@ -33,16 +33,16 @@ var _effects_layer: Node = null
 var _visual: CombatantVisual = null
 
 
-## stat_multiplier scales HP and attack (used for enemy difficulty growth).
+## Multipliers scale the UnitData base stats (enemy difficulty growth, ally upgrades).
 func setup(unit_data: UnitData, unit_team: Team, battle_layout: BattleLayout,
-		effects_layer: Node, stat_multiplier: float = 1.0) -> void:
+		effects_layer: Node, hp_multiplier: float = 1.0, attack_multiplier: float = 1.0) -> void:
 	data = unit_data
 	team = unit_team
 	layout = battle_layout
 	_effects_layer = effects_layer
-	max_hp = maxi(1, roundi(data.max_hp * stat_multiplier))
+	max_hp = maxi(1, roundi(data.max_hp * hp_multiplier))
 	hp = max_hp
-	attack_power = maxi(0, roundi(data.attack * stat_multiplier))
+	attack_power = maxi(0, roundi(data.attack * attack_multiplier))
 	defense = data.defense
 	# Small random offset so groups don't attack in perfect lockstep.
 	_attack_cooldown = randf_range(0.0, data.attack_interval * 0.3)
@@ -53,6 +53,18 @@ func setup(unit_data: UnitData, unit_team: Team, battle_layout: BattleLayout,
 	add_child(_visual)
 	_visual.setup(data, team == Team.ENEMY)
 	_visual.set_hp_ratio(1.0)
+
+
+## Re-applies stat multipliers to a living unit. A higher max HP raises current HP
+## by the same amount (no full heal); a lower one never kills the unit.
+func set_stat_multipliers(hp_multiplier: float, attack_multiplier: float) -> void:
+	if state == State.DEAD or data == null:
+		return
+	var new_max := maxi(1, roundi(data.max_hp * hp_multiplier))
+	hp = clampi(hp + new_max - max_hp, 1, new_max)
+	max_hp = new_max
+	attack_power = maxi(0, roundi(data.attack * attack_multiplier))
+	_visual.set_hp_ratio(float(hp) / float(max_hp))
 
 
 func is_alive() -> bool:

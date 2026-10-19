@@ -2,7 +2,7 @@
 
 Godot 4.3 / GDScript。スマートフォン縦画面（基準 390×844）向け。
 
-## 現在の状態：フェーズ2まで完了
+## 現在の状態：フェーズ3まで完了
 
 | 実装済み | 内容 |
 | --- | --- |
@@ -12,10 +12,11 @@ Godot 4.3 / GDScript。スマートフォン縦画面（基準 390×844）向け
 | 戦闘 | 索敵・接近・近接攻撃・弓兵の矢（Projectile）・防御力計算・HPバー・ダメージ数値・死亡演出 |
 | 召喚 | ボタンをタップで召喚。ユニットごとに待ち時間（初期5秒、下限1秒）、コスト×召喚数を全額払えるときだけ実行。拒否時は理由を表示（コイン不足／召喚待ち／上限／戦闘終了） |
 | コイン | 初期100。撃破報酬（雑魚5）を撃破時に1回だけ付与し「+5」を表示。補助として毎秒3コインの自然増加（`CoinWallet.passive_income_per_second`、0で無効） |
+| 強化 | 下部の「強化 ▲」で強化パネルを開閉（戦闘は止まらない）。召喚速度・召喚数・攻撃力・最大HP・陣地耐久・コイン獲得の6種。各ボタンに現在Lv・次の効果・必要コイン。購入時に効果をトースト表示、攻撃/HP強化は生存中の味方に「UP」表示 |
 | 陣地・勝敗 | 耐久力1000、0で敗北 → 結果画面（戦闘時間・撃破数・獲得コイン・ボス撃破数・リトライ） |
 | 中断 | バックグラウンド移行／フォーカス喪失で一時停止、「再開」で復帰 |
 
-未実装（後続フェーズ）：強化（フェーズ3）、出現スケジュール・ボス（フェーズ4）、タイトル画面・演出・本番ドット絵（フェーズ5）、エクスポート設定。
+未実装（後続フェーズ）：出現スケジュール・ボス（フェーズ4）、タイトル画面・演出・本番ドット絵（フェーズ5）、エクスポート設定。
 
 ### ユニット（`resources/units/*.tres`）
 
@@ -24,6 +25,21 @@ Godot 4.3 / GDScript。スマートフォン縦画面（基準 390×844）向け
 | 兵士 | 20 | 100 | 15 | 0 | 1.0秒 | 42 | 近接 |
 | 弓兵 | 30 | 55 | 20 | 0 | 1.3秒 | 34 | 120px（矢） |
 | 盾兵 | 25 | 220 | 6 | 3 | 1.2秒 | 30 | 近接 |
+
+### 強化（`resources/upgrades/*.tres`）
+
+次のレベルの費用 = round(基本コスト × 1.5^現在レベル)（`BattleUpgradeManager.cost_for_level` に集約）。
+
+| 強化 | 基本コスト | 上限Lv | 1Lvあたり | 備考 |
+| --- | --- | --- | --- | --- |
+| 召喚速度 | 50 | 5 | 間隔 −15% | 5秒→Lv5で1.25秒（下限1秒） |
+| 召喚数 | 100 | 3 | +1体 | 次回の召喚から。費用は単価×体数 |
+| 攻撃力 | 40 | 10 | +15% | 生存中の味方にも即時反映 |
+| 最大HP | 40 | 10 | +15% | 生存中の味方は最大HPの増加分だけ現在HPも増える（全回復はしない） |
+| 陣地耐久 | 60 | 5 | +200 | 最大値と現在値の両方が+200 |
+| コイン獲得 | 80 | 5 | 撃破報酬 +20% | 自然増加分には掛からない |
+
+強化レベル・コイン・味方は戦闘ごとにシーンごと作り直されるため、リトライや次の戦闘では必ず初期状態に戻ります。
 
 ## 起動方法
 
@@ -60,7 +76,7 @@ godot --path . -s res://tools/capture_screenshot.gd -- <秒数> <出力.png> [�
 ```
 scenes/battle/battle.tscn      メインシーン（BattleManager）
 scenes/units/                  ally_unit.tscn / enemy_unit.tscn
-scenes/ui/                     battle_ui.tscn / result_ui.tscn / summon_button.tscn
+scenes/ui/                     battle_ui.tscn / result_ui.tscn / summon_button.tscn / upgrade_button.tscn
 scenes/battle/projectile.tscn  矢
 scripts/battle/
   battle_manager.gd            戦闘全体・勝敗判定（同一フレームで勝敗が重なったら勝利優先、結果表示は1回のみ）
@@ -69,6 +85,7 @@ scripts/battle/
   enemy_spawner.gd             敵の出現と難易度上昇（パラメータは @export）
   summon_manager.gd            召喚（待ち時間・コスト・召喚数・上限・拒否理由）
   coin_wallet.gd               戦闘中のみのコイン
+  battle_upgrade_manager.gd    戦闘中の強化（レベル・費用計算・効果適用）
   projectile.gd                矢
   base_controller.gd           陣地の耐久力
   battlefield_background.gd    背景描画
@@ -78,6 +95,7 @@ scripts/units/
   combatant_visual.gd          見た目（SpriteFrames があれば使用、なければドット絵の仮描画）
   pixel_art.gd                 仮ドット絵パターン（ユニットとUIアイコンで共用）
 scripts/data/unit_data.gd      ユニット定義 Resource
+scripts/data/upgrade_data.gd   強化定義 Resource（resources/upgrades/）
 resources/units/              兵士・弓兵・盾兵
 resources/enemies/grunt.tres   雑魚敵（ゴブリン）
 resources/ui_theme.tres        UIテーマ

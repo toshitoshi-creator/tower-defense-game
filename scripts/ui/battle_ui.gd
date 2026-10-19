@@ -1,12 +1,14 @@
 class_name BattleUI
 extends CanvasLayer
 ## In-battle HUD: top bar (stage, time, coins, kills, pause) and bottom panel
-## (base durability, summon buttons).
+## (base durability, summon buttons, upgrade drawer toggle). The upgrade drawer opens
+## above the bottom panel without pausing the battle.
 ## Pure view: it emits requests and the BattleManager decides what happens.
 
 signal pause_requested
 signal resume_requested
 signal summon_slot_pressed(slot: int)
+signal upgrade_pressed(index: int)
 ## Emitted when the HUD's size or safe-area margins change, so the field can re-layout.
 signal layout_changed
 
@@ -21,13 +23,18 @@ signal layout_changed
 @onready var base_hp_label: Label = $Root/BottomPanel/Column/BaseRow/BaseHpBar/BaseHpLabel
 @onready var summon_row: HBoxContainer = $Root/BottomPanel/Column/SummonRow
 @onready var toast: Label = $Root/Toast
+@onready var upgrade_toggle: Button = $Root/BottomPanel/Column/BaseRow/UpgradeToggle
+@onready var upgrade_panel: Control = $Root/UpgradePanel
+@onready var upgrade_grid: GridContainer = $Root/UpgradePanel/Grid
 @onready var damage_flash: ColorRect = $DamageFlash
 @onready var pause_overlay: Control = $PauseOverlay
 @onready var resume_button: Button = $PauseOverlay/Center/Column/ResumeButton
 
 const SUMMON_BUTTON_SCENE := preload("res://scenes/ui/summon_button.tscn")
+const UPGRADE_BUTTON_SCENE := preload("res://scenes/ui/upgrade_button.tscn")
 
 var summon_buttons: Array[SummonButton] = []
+var upgrade_buttons: Array[UpgradeButton] = []
 
 var _flash_tween: Tween
 var _toast_tween: Tween
@@ -36,6 +43,8 @@ var _toast_tween: Tween
 func _ready() -> void:
 	pause_button.pressed.connect(pause_requested.emit)
 	resume_button.pressed.connect(resume_requested.emit)
+	upgrade_toggle.toggled.connect(set_upgrade_panel_open)
+	bottom_panel.resized.connect(_place_upgrade_panel)
 	top_bar.resized.connect(layout_changed.emit)
 	bottom_panel.resized.connect(layout_changed.emit)
 	get_viewport().size_changed.connect(_apply_safe_area)
@@ -44,6 +53,7 @@ func _ready() -> void:
 	set_kills(0)
 	set_coins(0)
 	show_pause_overlay(false)
+	set_upgrade_panel_open(false)
 
 
 func get_field_top() -> float:
@@ -74,6 +84,46 @@ func setup_summon_buttons(roster: Array[UnitData]) -> void:
 		summon_buttons.append(button)
 
 
+func setup_upgrade_buttons(upgrades: Array[UpgradeData]) -> void:
+	for b in upgrade_buttons:
+		b.queue_free()
+	upgrade_buttons.clear()
+	for i in upgrades.size():
+		var button := UPGRADE_BUTTON_SCENE.instantiate() as UpgradeButton
+		upgrade_grid.add_child(button)
+		button.index = i
+		button.upgrade_pressed.connect(upgrade_pressed.emit)
+		upgrade_buttons.append(button)
+
+
+## cost < 0 means max level.
+func refresh_upgrade_button(index: int, title: String, level: int, current_effect: String,
+		next_effect: String, cost: int, affordable: bool) -> void:
+	upgrade_buttons[index].refresh(title, level, current_effect, next_effect, cost, affordable)
+
+
+func show_upgrade_result(index: int, accepted: bool, message: String) -> void:
+	if index >= 0 and index < upgrade_buttons.size():
+		upgrade_buttons[index].play_feedback(accepted)
+	show_toast(message)
+
+
+func is_upgrade_panel_open() -> bool:
+	return upgrade_panel.visible
+
+
+func set_upgrade_panel_open(open: bool) -> void:
+	upgrade_panel.visible = open
+	upgrade_toggle.set_pressed_no_signal(open)
+	upgrade_toggle.text = "強化 ▼" if open else "強化 ▲"
+	_place_upgrade_panel()
+
+
+func _place_upgrade_panel() -> void:
+	upgrade_panel.offset_bottom = -bottom_panel.size.y
+	upgrade_panel.offset_top = upgrade_panel.offset_bottom - upgrade_panel.get_combined_minimum_size().y
+
+
 func refresh_summon_button(slot: int, cost: int, count: int, affordable: bool,
 		cooldown_ratio: float, cooldown_remaining: float) -> void:
 	summon_buttons[slot].refresh(cost, count, affordable, cooldown_ratio, cooldown_remaining)
@@ -91,7 +141,8 @@ func show_summon_result(slot: int, accepted: bool, message: String = "") -> void
 
 func show_toast(message: String) -> void:
 	toast.text = message
-	toast.offset_bottom = -bottom_panel.size.y - 8.0
+	var covered := bottom_panel.size.y + (upgrade_panel.size.y if upgrade_panel.visible else 0.0)
+	toast.offset_bottom = -covered - 8.0
 	toast.offset_top = toast.offset_bottom - 30.0
 	toast.visible = true
 	toast.modulate.a = 1.0

@@ -11,7 +11,7 @@ var _base: BaseController = null
 func setup_enemy(unit_data: UnitData, battle_layout: BattleLayout, effects_layer: Node,
 		base: BaseController, stat_multiplier: float = 1.0) -> void:
 	_base = base
-	setup(unit_data, Team.ENEMY, battle_layout, effects_layer, stat_multiplier)
+	setup(unit_data, Team.ENEMY, battle_layout, effects_layer, stat_multiplier, stat_multiplier)
 
 
 func is_at_base() -> bool:

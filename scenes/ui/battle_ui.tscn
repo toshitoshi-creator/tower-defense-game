@@ -98,7 +98,7 @@ anchors_preset = 12
 anchor_top = 1.0
 anchor_right = 1.0
 anchor_bottom = 1.0
-offset_top = -128.0
+offset_top = -142.0
 grow_horizontal = 2
 grow_vertical = 0
 mouse_filter = 2
@@ -109,9 +109,11 @@ theme_override_constants/separation = 6
 
 [node name="BaseRow" type="HBoxContainer" parent="Root/BottomPanel/Column"]
 layout_mode = 2
+theme_override_constants/separation = 8
 
 [node name="BaseHpBar" type="ProgressBar" parent="Root/BottomPanel/Column/BaseRow"]
 custom_minimum_size = Vector2(0, 30)
+size_flags_vertical = 4
 layout_mode = 2
 size_flags_horizontal = 3
 mouse_filter = 2
@@ -133,9 +135,35 @@ text = "陣地 1000 / 1000"
 horizontal_alignment = 1
 vertical_alignment = 1
 
+[node name="UpgradeToggle" type="Button" parent="Root/BottomPanel/Column/BaseRow"]
+custom_minimum_size = Vector2(88, 44)
+layout_mode = 2
+focus_mode = 0
+toggle_mode = true
+text = "強化 ▲"
+
 [node name="SummonRow" type="HBoxContainer" parent="Root/BottomPanel/Column"]
 layout_mode = 2
 theme_override_constants/separation = 8
+
+[node name="UpgradePanel" type="PanelContainer" parent="Root"]
+visible = false
+self_modulate = Color(1, 1, 1, 0.8)
+layout_mode = 1
+anchors_preset = 12
+anchor_top = 1.0
+anchor_right = 1.0
+anchor_bottom = 1.0
+offset_top = -350.0
+offset_bottom = -142.0
+grow_horizontal = 2
+grow_vertical = 0
+
+[node name="Grid" type="GridContainer" parent="Root/UpgradePanel"]
+layout_mode = 2
+theme_override_constants/h_separation = 8
+theme_override_constants/v_separation = 8
+columns = 2
 
 [node name="Toast" type="Label" parent="Root"]
 visible = false

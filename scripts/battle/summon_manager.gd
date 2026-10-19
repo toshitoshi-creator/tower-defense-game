@@ -32,6 +32,9 @@ var active: bool = false
 ## Upgrade hooks (phase 3). Use set_count_per_summon() to change the count.
 var interval_multiplier: float = 1.0
 var count_per_summon: int = 1
+## Ally stat upgrades. Use set_ally_multipliers() so living allies update too.
+var ally_hp_multiplier: float = 1.0
+var ally_attack_multiplier: float = 1.0
 
 var _wallet: CoinWallet
 var _layout: BattleLayout
@@ -63,6 +66,14 @@ func get_interval() -> float:
 
 func set_count_per_summon(count: int) -> void:
 	count_per_summon = clampi(count, 1, MAX_COUNT_PER_SUMMON)
+
+
+## Applies to future summons and to every ally already on the field.
+func set_ally_multipliers(hp_multiplier: float, attack_multiplier: float) -> void:
+	ally_hp_multiplier = hp_multiplier
+	ally_attack_multiplier = attack_multiplier
+	for node in get_tree().get_nodes_in_group(&"allies"):
+		(node as Combatant).set_stat_multipliers(ally_hp_multiplier, ally_attack_multiplier)
 
 
 func get_cooldown_remaining(slot: int) -> float:
@@ -132,7 +143,7 @@ func summon(unit_data: UnitData, at: Vector2 = Vector2.INF) -> UnitBase:
 	if at == Vector2.INF:
 		at = Vector2(randf_range(_layout.left + 30.0, _layout.right - 30.0), _layout.ally_spawn_y)
 	unit.position = at
-	unit.setup_ally(unit_data, _layout, _effects)
+	unit.setup_ally(unit_data, _layout, _effects, ally_hp_multiplier, ally_attack_multiplier)
 	_units_parent.add_child(unit)
 	unit_summoned.emit(unit)
 	return unit

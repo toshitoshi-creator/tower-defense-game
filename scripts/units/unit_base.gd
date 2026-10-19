@@ -7,8 +7,9 @@ extends Combatant
 var _hunting: bool = false
 
 
-func setup_ally(unit_data: UnitData, battle_layout: BattleLayout, effects_layer: Node) -> void:
-	setup(unit_data, Team.ALLY, battle_layout, effects_layer)
+func setup_ally(unit_data: UnitData, battle_layout: BattleLayout, effects_layer: Node,
+		hp_multiplier: float = 1.0, attack_multiplier: float = 1.0) -> void:
+	setup(unit_data, Team.ALLY, battle_layout, effects_layer, hp_multiplier, attack_multiplier)
 
 
 func _find_target() -> Combatant:
