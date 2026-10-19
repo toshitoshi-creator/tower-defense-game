@@ -1,0 +1,227 @@
+<title>ピクセル防衛戦</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=DotGothic16&display=swap">
+<style>
+/* Layout: one portrait game frame, centered and letterboxed in the night-sky ground. */
+:root {
+  --ground: #14171a;      /* letterbox around the game, matches the game's clear color */
+  --frame: #2a2420;       /* thin castle-stone border around the canvas */
+  --ink: #e9e2cf;         /* loading text */
+  --gold: #ffd35a;        /* title and progress fill, same gold as the in-game title */
+  --track: #3a3430;       /* progress track */
+  --danger: #ff6a5a;      /* error text */
+  --font-pixel: "DotGothic16", "Hiragino Kaku Gothic ProN", "Noto Sans JP", sans-serif;
+  color-scheme: dark;
+}
+html, body { height: 100%; }
+body {
+  background: var(--ground);
+  color: var(--ink);
+  font-family: var(--font-pixel);
+  overflow: hidden;
+  padding-left: max(16px, env(safe-area-inset-left, 0px));
+  padding-right: max(16px, env(safe-area-inset-right, 0px));
+  padding-block: 8px;
+  box-sizing: border-box;
+  -webkit-user-select: none;
+  user-select: none;
+  -webkit-tap-highlight-color: transparent;
+}
+#stage {
+  height: 100%;
+  display: grid;
+  place-items: center;
+}
+#frame {
+  position: relative;
+  outline: 2px solid var(--frame);
+  background: #1c201b;
+  max-width: 100%;
+}
+#canvas {
+  display: block;
+  width: 100%;
+  height: 100%;
+  touch-action: none;
+  image-rendering: pixelated;
+}
+#canvas:focus { outline: none; }
+#loader {
+  position: absolute;
+  inset: 0;
+  display: grid;
+  place-content: center;
+  gap: 18px;
+  text-align: center;
+  padding: 24px;
+  background: var(--ground);
+}
+#loader h1 {
+  margin: 0;
+  font-size: 2.2rem;
+  font-weight: 400;
+  color: var(--gold);
+  letter-spacing: 0.04em;
+  text-wrap: balance;
+}
+#status { font-size: 1rem; min-height: 1.4em; }
+#bar {
+  width: min(240px, 70vw);
+  height: 14px;
+  margin-inline: auto;
+  background: var(--track);
+  outline: 2px solid var(--frame);
+}
+#fill {
+  height: 100%;
+  width: 0%;
+  background: var(--gold);
+  transition: width 120ms linear;
+}
+#hint { font-size: 0.85rem; opacity: 0.7; }
+#loader.error #status { color: var(--danger); }
+@media (prefers-reduced-motion: reduce) { #fill { transition: none; } }
+</style>
+
+<div id="stage">
+  <div id="frame">
+    <canvas id="canvas" tabindex="0">このブラウザではゲームを表示できません。</canvas>
+    <div id="loader" role="status" aria-live="polite">
+      <h1>ピクセル防衛戦</h1>
+      <div id="bar"><div id="fill"></div></div>
+      <div id="status">読み込み中… 0%</div>
+      <div id="hint">初回は約35MBを読み込みます</div>
+    </div>
+  </div>
+</div>
+
+<script src="index.js"></script>
+<script src="index.pck.js"></script>
+<script>
+(() => {
+  // The engine (35MB) is published in three parts because artifact files are capped
+  // at 15MB each, and the game data (.pck) ships base64 in index.pck.js because only
+  // web file types are served. Both are handed to Godot through a fetch shim, so its
+  // own loader sees a normal index.wasm and index.pck.
+  const WASM_PARTS = ["index.part0.wasm", "index.part1.wasm", "index.part2.wasm"];
+  const WASM_SIZE = 35376909;
+  const PCK_SIZE = 523168;
+  // Portrait range the game lays out well in (base 390x844 = 0.46).
+  const MIN_ASPECT = 0.42;
+  const MAX_ASPECT = 0.62;
+
+  const frame = document.getElementById("frame");
+  const canvas = document.getElementById("canvas");
+  const loader = document.getElementById("loader");
+  const statusEl = document.getElementById("status");
+  const fill = document.getElementById("fill");
+
+  function fitFrame() {
+    const stage = document.getElementById("stage");
+    const boxW = stage.clientWidth;
+    const boxH = stage.clientHeight;
+    let w = Math.min(boxW, boxH * MAX_ASPECT);
+    let h = Math.min(boxH, w / MIN_ASPECT);
+    w = Math.min(w, h * MAX_ASPECT);
+    frame.style.width = Math.floor(w) + "px";
+    frame.style.height = Math.floor(h) + "px";
+    const dpr = window.devicePixelRatio || 1;
+    canvas.width = Math.round(w * dpr);
+    canvas.height = Math.round(h * dpr);
+  }
+  fitFrame();
+  window.addEventListener("resize", fitFrame);
+
+  const total = WASM_SIZE + PCK_SIZE;
+  let loaded = 0;
+  function progress(bytes) {
+    loaded += bytes;
+    const pct = Math.min(100, Math.floor((loaded / total) * 100));
+    fill.style.width = pct + "%";
+    statusEl.textContent = "読み込み中… " + pct + "%";
+  }
+
+  async function download(url) {
+    const res = await fetch(url);
+    if (!res.ok) throw new Error(url + " (" + res.status + ")");
+    if (!res.body) {
+      const buf = await res.arrayBuffer();
+      progress(buf.byteLength);
+      return new Uint8Array(buf);
+    }
+    const reader = res.body.getReader();
+    const chunks = [];
+    let size = 0;
+    for (;;) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      chunks.push(value);
+      size += value.byteLength;
+      progress(value.byteLength);
+    }
+    const out = new Uint8Array(size);
+    let offset = 0;
+    for (const c of chunks) { out.set(c, offset); offset += c.byteLength; }
+    return out;
+  }
+
+  function showError(message) {
+    loader.classList.add("error");
+    loader.hidden = false;
+    statusEl.textContent = message;
+  }
+
+  async function boot() {
+    if (typeof Engine === "undefined") {
+      showError("ゲーム本体（index.js）を読み込めませんでした。ページを再読み込みしてください。");
+      return;
+    }
+    const missing = Engine.getMissingFeatures({ threads: false });
+    if (missing.length) {
+      showError("このブラウザでは遊べません（不足: " + missing.join(", ") + "）。最新の Chrome / Safari でお試しください。");
+      return;
+    }
+    const parts = await Promise.all(WASM_PARTS.map(download));
+    const pck = Uint8Array.from(atob(window.GAME_PCK_B64), (c) => c.charCodeAt(0));
+    progress(PCK_SIZE);
+    const wasm = new Uint8Array(WASM_SIZE);
+    let offset = 0;
+    for (const p of parts) { wasm.set(p, offset); offset += p.byteLength; }
+    if (offset !== WASM_SIZE) throw new Error("engine size mismatch (" + offset + ")");
+
+    const nativeFetch = window.fetch.bind(window);
+    window.fetch = (input, init) => {
+      const url = typeof input === "string" ? input : input.url;
+      if (url.endsWith("index.wasm")) {
+        return Promise.resolve(new Response(wasm, { headers: { "Content-Type": "application/wasm" } }));
+      }
+      if (url.endsWith("index.pck")) {
+        return Promise.resolve(new Response(pck, { headers: { "Content-Type": "application/octet-stream" } }));
+      }
+      return nativeFetch(input, init);
+    };
+
+    statusEl.textContent = "起動中…";
+    const engine = new Engine({
+      args: [],
+      canvasResizePolicy: 0,
+      ensureCrossOriginIsolationHeaders: false,
+      executable: "index",
+      experimentalVK: false,
+      fileSizes: { "index.pck": PCK_SIZE, "index.wasm": WASM_SIZE },
+      focusCanvas: true,
+      gdextensionLibs: [],
+    });
+    await engine.startGame({ mainPack: "index.pck" });
+    loader.hidden = true;
+    canvas.focus();
+  }
+
+  boot().catch((err) => {
+    console.error(err);
+    showError("読み込みに失敗しました: " + (err && err.message ? err.message : err) + "。再読み込みしてください。");
+  });
+})();
+</script>

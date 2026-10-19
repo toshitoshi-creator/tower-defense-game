@@ -57,6 +57,13 @@ Godot 4.3 / GDScript。スマートフォン縦画面（基準 390×844）向け
 
 強化レベル・コイン・味方は戦闘ごとにシーンごと作り直されるため、リトライや次の戦闘では必ず初期状態に戻ります。
 
+## ブラウザ版
+
+`tools/build_web.sh` で `build/artifact/` にブラウザ版を作ります（Godot 4.3 の Web 用エクスポートテンプレートが必要）。
+スレッドなし版なので特別なサーバー設定は不要です。claude.ai の Artifact として公開するため、
+35MB のエンジンを3つの `.wasm` に分割し、ゲームデータ（.pck）を base64 の JS に埋め込み、
+`web/pixel-defense.html` が読み込み時に組み立てます。
+
 ## スマートフォン向け書き出し
 
 `export_presets.cfg` に Android / iOS のプリセットを用意しています（縦画面固定、パッケージID `com.example.pixeltowerdefense`、ネット権限なし）。
