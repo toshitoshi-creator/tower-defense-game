@@ -6,7 +6,12 @@ extends SceneTree
 
 const BATTLE_SCENE := preload("res://scenes/battle/battle.tscn")
 const SOLDIER: UnitData = preload("res://resources/units/soldier.tres")
+const ARCHER: UnitData = preload("res://resources/units/archer.tres")
+const SHIELD: UnitData = preload("res://resources/units/shield.tres")
 const GRUNT: UnitData = preload("res://resources/enemies/grunt.tres")
+const SLOT_SOLDIER := 0
+const SLOT_ARCHER := 1
+const SLOT_SHIELD := 2
 const FPS := 60
 
 var _failures: Array[String] = []
@@ -15,6 +20,10 @@ var _battle: BattleManager
 
 
 func _initialize() -> void:
+	# Script mode starts with a tiny headless window; use the phone reference size.
+	await process_frame
+	root.size = Vector2i(390, 844)
+	await process_frame
 	var tests: Array[String] = []
 	for m in get_method_list():
 		var method_name: String = m["name"]
@@ -50,13 +59,13 @@ func _check(condition: bool, message: String) -> void:
 		_failures.append("%s: %s" % [_current, message])
 
 
-## Creates a battle. With manual=true, automatic spawning/deploying is off so the
-## test controls exactly which units exist.
+## Creates a battle. With manual=true, automatic enemy spawning and passive income
+## are off so the test controls exactly which units and coins exist.
 func _start_battle(manual: bool = true) -> BattleManager:
 	_battle = BATTLE_SCENE.instantiate() as BattleManager
 	if manual:
 		_battle.get_node("EnemySpawner").auto_spawn = false
-		_battle.get_node("SummonManager").auto_deploy = false
+		_battle.get_node("CoinWallet").passive_income_per_second = 0.0
 	root.add_child(_battle)
 	current_scene = _battle
 	await _frames(2)
@@ -101,11 +110,11 @@ func test_battle_starts_and_clock_advances() -> void:
 	_check(b.clock.elapsed > 0.9 and b.clock.elapsed < 1.2, "clock ~1s, got %f" % b.clock.elapsed)
 
 
-func test_auto_spawn_creates_enemies_and_allies() -> void:
+func test_auto_spawn_creates_enemies_but_no_free_allies() -> void:
 	await _start_battle(false)
 	await _seconds(5.0)
 	_check(_count(&"enemies") > 0, "enemies should spawn automatically")
-	_check(_count(&"allies") > 0, "allies should deploy automatically (phase 1)")
+	_check(_count(&"allies") == 0, "allies only appear when the player summons")
 
 
 func test_enemy_moves_down_and_ally_moves_up() -> void:
@@ -122,10 +131,24 @@ func test_enemy_moves_down_and_ally_moves_up() -> void:
 func test_ally_stops_at_top_and_enemy_stops_at_base_line() -> void:
 	var b := await _start_battle()
 	var ally := _ally(Vector2(60, b.layout.ally_stop_y + 30.0))
-	var enemy := _enemy(Vector2(330, b.layout.base_line_y - 30.0))
-	await _seconds(3.0)
+	await _seconds(2.0)
 	_check(is_equal_approx(ally.position.y, b.layout.ally_stop_y), "ally should hold at top line")
+	_check(ally.state == Combatant.State.IDLE, "ally idles with no enemies")
+	ally.take_damage(9999)
+	await _frames(2)
+	var enemy := _enemy(Vector2(330, b.layout.base_line_y - 30.0))
+	await _seconds(2.0)
 	_check(is_equal_approx(enemy.position.y, b.layout.base_line_y), "enemy should hold at base line")
+
+
+func test_allies_hunt_enemies_that_slipped_past() -> void:
+	var b := await _start_battle()
+	var ally := _ally(Vector2(40, b.layout.ally_stop_y))
+	var enemy := _enemy(Vector2(350, b.layout.base_line_y - 10.0))
+	_check(ally.global_position.distance_to(enemy.global_position) > SOLDIER.aggro_range,
+			"setup: enemy starts out of aggro range")
+	await _seconds(20.0)
+	_check(not is_instance_valid(enemy) or not enemy.is_alive(), "ally should chase down and kill the leaker")
 
 
 func test_melee_units_damage_each_other() -> void:
@@ -230,7 +253,8 @@ func test_base_zero_hp_is_defeat_and_stops_battle() -> void:
 	var ally_pos := ally.position
 	var enemy_hp := enemy.hp
 	b.spawner.auto_spawn = true
-	b.summoner.auto_deploy = true
+	b.wallet.passive_income_per_second = 5.0
+	var coins_at_end := b.wallet.coins
 	var enemies_before := _count(&"enemies")
 	var allies_before := _count(&"allies")
 	await _seconds(5.0)
@@ -241,6 +265,8 @@ func test_base_zero_hp_is_defeat_and_stops_battle() -> void:
 	_check(_count(&"allies") == allies_before, "no new allies")
 	_check(b.spawner.spawn_enemy(GRUNT) == null, "explicit spawn refused after end")
 	_check(b.summoner.summon(SOLDIER) == null, "explicit summon refused after end")
+	_check(b.request_summon(SLOT_SOLDIER) == SummonManager.Reason.BATTLE_OVER, "tap summon refused after end")
+	_check(b.wallet.coins == coins_at_end, "no coins gained or spent after end")
 	b.base.take_damage(100)
 	b.notify_final_boss_defeated()
 	await _frames(2)
@@ -248,18 +274,216 @@ func test_base_zero_hp_is_defeat_and_stops_battle() -> void:
 			"later end requests are ignored")
 
 
-func test_natural_battle_eventually_ends_in_defeat() -> void:
-	# No player input in phase 1: enemy scaling must overwhelm the auto-deployed allies.
+func test_idle_player_eventually_loses() -> void:
 	var b := await _start_battle(false)
-	var limit := 8.0 * 60.0
+	var limit := 4.0 * 60.0
 	while b.phase != BattleManager.Phase.ENDED and b.clock.elapsed < limit:
 		await _seconds(5.0)
-	_check(b.phase == BattleManager.Phase.ENDED, "battle should end within %d s" % int(limit))
-	_check(b.result == BattleManager.Result.DEFEAT, "result should be defeat")
-	_check(b.kills > 0, "allies should have killed enemies")
-	print("        natural defeat at %s, kills=%d, peak counts ok" % [BattleClock.format_time(b.clock.elapsed), b.kills])
-	_check(_count(&"enemies") <= b.spawner.max_alive, "enemy cap respected")
-	_check(_count(&"allies") <= b.summoner.max_alive, "ally cap respected")
+	_check(b.result == BattleManager.Result.DEFEAT and b.phase == BattleManager.Phase.ENDED,
+			"without summons the base should fall")
+	print("        idle defeat at %s" % BattleClock.format_time(b.clock.elapsed))
+
+
+func test_summoning_player_holds_and_earns_coins() -> void:
+	# Simple bot: tap every ready, affordable slot (shield first, then soldier, archer).
+	var b := await _start_battle(false)
+	var order := [SLOT_SHIELD, SLOT_SOLDIER, SLOT_ARCHER]
+	var limit := 8.0 * 60.0
+	var peak_allies := 0
+	while b.phase != BattleManager.Phase.ENDED and b.clock.elapsed < limit:
+		for slot in order:
+			if b.summoner.check_summon(slot) == SummonManager.Reason.OK:
+				b.request_summon(slot)
+		peak_allies = maxi(peak_allies, _count(&"allies"))
+		await _seconds(0.5)
+	print("        bot: ended=%s at %s, kills=%d, earned=%d, peak allies=%d" % [
+			b.phase == BattleManager.Phase.ENDED, BattleClock.format_time(b.clock.elapsed),
+			b.kills, b.wallet.total_earned, peak_allies])
+	_check(b.clock.elapsed >= 150.0, "a summoning player should outlast an idle one (%.0fs)" % b.clock.elapsed)
+	_check(b.kills >= 30, "bot army should kill enemies (%d)" % b.kills)
+	_check(b.wallet.total_earned > 0, "coins earned")
+	_check(peak_allies <= b.summoner.max_alive, "ally cap respected")
+
+
+func test_summon_each_unit_type_spends_cost() -> void:
+	var b := await _start_battle()
+	b.wallet.coins = 200
+	var expected := 200
+	for slot in [SLOT_SOLDIER, SLOT_ARCHER, SLOT_SHIELD]:
+		var data: UnitData = b.summoner.roster[slot]
+		var before := _count(&"allies")
+		_check(b.request_summon(slot) == SummonManager.Reason.OK, "%s summon OK" % data.id)
+		expected -= data.summon_cost
+		_check(b.wallet.coins == expected, "%s cost %d deducted (coins=%d)" % [data.id, data.summon_cost, b.wallet.coins])
+		_check(_count(&"allies") == before + 1, "%s spawned" % data.id)
+		var found := false
+		for u in get_nodes_in_group(&"allies"):
+			found = found or (u as UnitBase).data == data
+		_check(found, "%s unit present" % data.id)
+	_check(SOLDIER.summon_cost == 20 and ARCHER.summon_cost == 30 and SHIELD.summon_cost == 25, "spec costs")
+	_check(SOLDIER.max_hp == 100 and ARCHER.max_hp == 55 and SHIELD.max_hp == 220, "spec hp")
+	_check(SOLDIER.attack == 15 and ARCHER.attack == 20 and SHIELD.attack == 6, "spec attack")
+	_check(is_equal_approx(ARCHER.attack_interval, 1.3) and is_equal_approx(SHIELD.attack_interval, 1.2),
+			"spec attack intervals")
+	_check(ARCHER.move_speed < SOLDIER.move_speed and SHIELD.move_speed < SOLDIER.move_speed, "slower archer/shield")
+
+
+func test_summon_refused_without_coins() -> void:
+	var b := await _start_battle()
+	b.wallet.coins = SOLDIER.summon_cost - 1
+	var reasons := []
+	b.summoner.summon_rejected.connect(func(_s: int, r: SummonManager.Reason) -> void: reasons.append(r))
+	_check(b.request_summon(SLOT_SOLDIER) == SummonManager.Reason.NOT_ENOUGH_COINS, "refused for coins")
+	_check(_count(&"allies") == 0, "no unit spawned")
+	_check(b.wallet.coins == SOLDIER.summon_cost - 1, "coins untouched")
+	_check(reasons == [SummonManager.Reason.NOT_ENOUGH_COINS], "rejection signalled once")
+	_check(b.battle_ui.toast.visible and b.battle_ui.toast.text == "コインが足りません", "reason shown to player")
+	_check(b.summoner.get_cooldown_remaining(SLOT_SOLDIER) == 0.0, "failed summon does not start cooldown")
+
+
+func test_summon_cooldown_per_slot() -> void:
+	var b := await _start_battle()
+	b.wallet.coins = 500
+	_check(b.request_summon(SLOT_SOLDIER) == SummonManager.Reason.OK, "first summon")
+	_check(b.request_summon(SLOT_SOLDIER) == SummonManager.Reason.COOLDOWN, "second summon blocked by cooldown")
+	_check(b.battle_ui.toast.text == "召喚待ち中", "cooldown reason shown")
+	_check(b.request_summon(SLOT_ARCHER) == SummonManager.Reason.OK, "other slots have their own cooldown")
+	_check(is_equal_approx(b.summoner.get_interval(), 5.0), "initial interval 5s")
+	await _seconds(4.8)
+	_check(b.request_summon(SLOT_SOLDIER) == SummonManager.Reason.COOLDOWN, "still cooling at 4.8s")
+	await _seconds(0.3)
+	_check(b.request_summon(SLOT_SOLDIER) == SummonManager.Reason.OK, "ready after 5s")
+	b.summoner.interval_multiplier = 0.01
+	_check(b.summoner.get_interval() == SummonManager.MIN_INTERVAL, "interval floor")
+
+
+func test_multi_summon_cost_and_cap() -> void:
+	var b := await _start_battle()
+	b.summoner.set_count_per_summon(3)
+	_check(b.summoner.get_summon_cost(SLOT_SOLDIER) == 60, "3 soldiers cost 60")
+	b.wallet.coins = 59
+	_check(b.request_summon(SLOT_SOLDIER) == SummonManager.Reason.NOT_ENOUGH_COINS, "partial funds refused")
+	_check(_count(&"allies") == 0 and b.wallet.coins == 59, "nothing spent or spawned")
+	b.wallet.coins = 60
+	_check(b.request_summon(SLOT_SOLDIER) == SummonManager.Reason.OK, "full funds accepted")
+	_check(_count(&"allies") == 3 and b.wallet.coins == 0, "3 spawned, 60 spent")
+	b.summoner.max_alive = 5
+	b.wallet.coins = 1000
+	_check(b.summoner.get_summon_count() == 2, "count limited by cap")
+	_check(b.request_summon(SLOT_SHIELD) == SummonManager.Reason.OK, "summon up to cap")
+	_check(_count(&"allies") == 5 and b.wallet.coins == 1000 - 2 * SHIELD.summon_cost, "only spawned units paid")
+	_check(b.request_summon(SLOT_ARCHER) == SummonManager.Reason.UNIT_CAP, "cap reached")
+	b.summoner.set_count_per_summon(99)
+	_check(b.summoner.count_per_summon == SummonManager.MAX_COUNT_PER_SUMMON, "count clamped")
+
+
+func test_archer_shoots_arrows_from_range() -> void:
+	var b := await _start_battle()
+	var enemy := _enemy(Vector2(195, 300))
+	enemy.data = GRUNT.duplicate()
+	enemy.data.move_speed = 0.0  # Stationary target.
+	var archer := _ally(Vector2(195, 300 + 110), ARCHER)
+	var saw_projectile := false
+	var hits := []
+	enemy.damaged.connect(func(_c: Combatant, amount: int) -> void: hits.append(amount))
+	for i in 150:
+		await physics_frame
+		for child in b.effects.get_children():
+			saw_projectile = saw_projectile or child is Projectile
+	_check(saw_projectile, "archer fired a projectile")
+	_check(hits.size() >= 1, "arrow hit the enemy")
+	_check(hits.all(func(h: int) -> bool: return h == ARCHER.attack), "each arrow deals archer attack")
+	_check(archer.position.distance_to(enemy.position) > 60.0, "archer stays at range (dist %.0f)" % archer.position.distance_to(enemy.position))
+
+
+func test_arrow_in_flight_when_target_dies_does_nothing() -> void:
+	var b := await _start_battle()
+	var enemy := _enemy(Vector2(195, 200))
+	var proj := (load(Combatant.PROJECTILE_SCENE_PATH) as PackedScene).instantiate() as Projectile
+	b.effects.add_child(proj)
+	proj.launch(Vector2(195, 600), enemy, 999, 200.0, null)
+	enemy.take_damage(9999)
+	await _seconds(2.5)
+	_check(not is_instance_valid(proj), "projectile cleaned up")
+	_check(b.kills == 1, "kill counted once")
+
+
+func test_shield_defense_reduces_damage() -> void:
+	await _start_battle()
+	var shield := _ally(Vector2(195, 400), SHIELD)
+	_check(shield.take_damage(GRUNT.attack) == GRUNT.attack - SHIELD.defense, "defense applied")
+
+
+func test_kill_reward_paid_once_with_many_attackers() -> void:
+	var b := await _start_battle()
+	b.wallet.coins = 0
+	var enemy := _enemy(Vector2(195, 380))
+	enemy.max_hp = 300
+	enemy.hp = 300
+	for i in 3:
+		_ally(Vector2(150 + i * 40, 420))
+		_ally(Vector2(150 + i * 40, 500), ARCHER)
+	await _seconds(8.0)
+	_check(not is_instance_valid(enemy) or not enemy.is_alive(), "enemy died")
+	_check(b.kills == 1, "one kill")
+	_check(b.wallet.coins == GRUNT.reward and b.wallet.total_earned == GRUNT.reward,
+			"reward paid exactly once (coins=%d)" % b.wallet.coins)
+	var enemy2 := _enemy(Vector2(60, 200))
+	enemy2.take_damage(9999)
+	await _frames(1)
+	var popup := false
+	for child in b.effects.get_children():
+		popup = popup or (child is FloatingText and (child as Label).text == "+%d" % GRUNT.reward)
+	_check(popup, "coin popup shown at the kill")
+
+
+func test_coin_hud_and_reset_values() -> void:
+	var b := await _start_battle()
+	_check(b.wallet.coins == b.wallet.starting_coins, "battle starts with starting coins")
+	_check(b.battle_ui.coin_label.text == "● %d" % b.wallet.coins, "HUD shows coins")
+	b.wallet.add_reward(12)
+	_check(b.battle_ui.coin_label.text == "● %d" % (b.wallet.starting_coins + 12), "HUD updates")
+	b.wallet.reward_multiplier = 1.5
+	_check(b.wallet.add_reward(5) == 8, "reward multiplier rounds")
+
+
+func test_passive_income_and_stops_after_end() -> void:
+	var b := await _start_battle()
+	b.wallet.passive_income_per_second = 3.0
+	var start := b.wallet.coins
+	await _seconds(2.0)
+	_check(b.wallet.coins - start >= 5 and b.wallet.coins - start <= 7, "~3 coins/s (got %d)" % (b.wallet.coins - start))
+	b.base.take_damage(b.base.hp)
+	await _frames(2)
+	var at_end := b.wallet.coins
+	await _seconds(2.0)
+	_check(b.wallet.coins == at_end, "no income after battle end")
+	_check(b.wallet.add_reward(100) == 0, "no rewards after battle end")
+
+
+func test_tapping_summon_button_summons() -> void:
+	var b := await _start_battle()
+	await _tap(Vector2(195, 400))
+	_check(_count(&"allies") == 0, "tapping the battlefield summons nothing")
+	await _tap(b.battle_ui.summon_buttons[SLOT_SHIELD].get_global_rect().get_center())
+	_check(_count(&"allies") == 1, "touch on shield button summons one unit")
+	var unit := get_first_node_in_group(&"allies") as UnitBase
+	_check(unit != null and unit.data == SHIELD, "it is a shield")
+
+
+func _tap(at: Vector2) -> void:
+	var touch := InputEventScreenTouch.new()
+	touch.position = at
+	touch.pressed = true
+	# Goes through the same path as a real finger (touch -> emulated mouse -> Button).
+	Input.parse_input_event(touch)
+	Input.flush_buffered_events()
+	await process_frame
+	var release := touch.duplicate() as InputEventScreenTouch
+	release.pressed = false
+	Input.parse_input_event(release)
+	Input.flush_buffered_events()
+	await _frames(2)
 
 
 func test_victory_beats_defeat_in_same_frame() -> void:
@@ -329,20 +553,29 @@ func test_ui_fits_various_portrait_screens() -> void:
 				"%s: base sits above bottom panel" % label)
 		_check(b.battle_ui.base_hp_label.get_minimum_size().x <= b.battle_ui.base_hp_bar.size.x,
 				"%s: base hp text fits" % label)
+		_check(b.battle_ui.summon_buttons.size() == 3, "%s: three summon buttons" % label)
+		var prev: Rect2
+		for i in b.battle_ui.summon_buttons.size():
+			var r := b.battle_ui.summon_buttons[i].get_global_rect()
+			_check(view.encloses(r), "%s: summon button %d on screen" % [label, i])
+			_check(r.size.x >= 48.0 and r.size.y >= 48.0, "%s: summon button %d >= 48px (%s)" % [label, i, r.size])
+			if i > 0:
+				_check(r.position.x - prev.end.x >= 6.0, "%s: buttons %d/%d spaced" % [label, i - 1, i])
+			prev = r
 	root.size = Vector2i(390, 844)
 
 
 func test_pixel_patterns_are_rectangular() -> void:
-	for key in CombatantVisual.PATTERNS:
-		var rows: Array = CombatantVisual.PATTERNS[key]
+	for key in PixelArt.PATTERNS:
+		var rows: Array = PixelArt.PATTERNS[key]
 		var width := (rows[0] as String).length()
 		for r in rows:
 			_check((r as String).length() == width, "pattern %s row '%s' width" % [key, r])
 			for ch in (r as String):
-				_check(ch == "." or ch == "b" or ch == "a" or CombatantVisual.FIXED_COLORS.has(ch),
+				_check(ch == "." or ch == "b" or ch == "a" or PixelArt.FIXED_COLORS.has(ch),
 						"pattern %s unknown key %s" % [key, ch])
-	for d in [SOLDIER, GRUNT]:
-		_check(CombatantVisual.PATTERNS.has((d as UnitData).placeholder_pattern),
+	for d in [SOLDIER, ARCHER, SHIELD, GRUNT]:
+		_check(PixelArt.PATTERNS.has((d as UnitData).placeholder_pattern),
 				"%s placeholder exists" % (d as UnitData).id)
 
 

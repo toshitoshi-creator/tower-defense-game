@@ -15,6 +15,7 @@ move_speed = 42.0
 attack_range = 4.0
 aggro_range = 110.0
 attack_type = 0
+projectile_speed = 260.0
 summon_cost = 20
 reward = 0
 placeholder_pattern = &"soldier"

@@ -3,7 +3,7 @@ extends Resource
 ## Data definition shared by allies and enemies.
 ## Adding a new unit type = adding a new .tres file; combat logic lives in Combatant.
 
-enum AttackType { MELEE }
+enum AttackType { MELEE, RANGED }
 
 @export var id: StringName = &""
 @export var display_name: String = ""
@@ -22,6 +22,8 @@ enum AttackType { MELEE }
 ## Distance at which the unit notices and walks toward an opponent.
 @export var aggro_range: float = 110.0
 @export var attack_type: AttackType = AttackType.MELEE
+## RANGED only: projectile flight speed in pixels per second.
+@export var projectile_speed: float = 260.0
 
 @export_group("Economy")
 @export var summon_cost: int = 0

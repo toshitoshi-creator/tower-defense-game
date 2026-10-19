@@ -8,6 +8,7 @@ signal retry_requested
 @onready var title_label: Label = $Dim/Center/Panel/Column/TitleLabel
 @onready var time_label: Label = $Dim/Center/Panel/Column/TimeLabel
 @onready var kills_label: Label = $Dim/Center/Panel/Column/KillsLabel
+@onready var coins_label: Label = $Dim/Center/Panel/Column/CoinsLabel
 @onready var boss_label: Label = $Dim/Center/Panel/Column/BossLabel
 @onready var retry_button: Button = $Dim/Center/Panel/Column/RetryButton
 
@@ -26,5 +27,6 @@ func show_result(victory: bool, stats: Dictionary) -> void:
 			Color(1.0, 0.85, 0.3) if victory else Color(1.0, 0.4, 0.35))
 	time_label.text = "戦闘時間  %s" % BattleClock.format_time(stats.get("time", 0.0))
 	kills_label.text = "撃破数  %d" % stats.get("kills", 0)
+	coins_label.text = "獲得コイン  %d" % stats.get("coins_earned", 0)
 	boss_label.text = "ボス撃破  %d" % stats.get("bosses_defeated", 0)
 	panel.visible = true

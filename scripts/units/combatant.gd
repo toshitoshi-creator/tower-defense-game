@@ -13,6 +13,9 @@ enum State { IDLE, MOVE, ATTACK, DEAD }
 const GROUP_BY_TEAM := {Team.ALLY: &"allies", Team.ENEMY: &"enemies"}
 ## Re-scanning for targets every frame is wasteful; this keeps it cheap on phones.
 const RETARGET_INTERVAL := 0.2
+## Loaded lazily (not preloaded): projectile.gd references Combatant, and a preload
+## here would make the two scripts load each other.
+const PROJECTILE_SCENE_PATH := "res://scenes/battle/projectile.tscn"
 
 var data: UnitData
 var team: Team = Team.ALLY
@@ -67,9 +70,9 @@ func _physics_process(delta: float) -> void:
 	_retarget_timer -= delta
 	if not _is_valid_target(target) or _retarget_timer <= 0.0:
 		_retarget_timer = RETARGET_INTERVAL
-		var nearest := _find_nearest_opponent()
-		if nearest != null:
-			target = nearest
+		var found := _find_target()
+		if found != null:
+			target = found
 		elif not _is_valid_target(target):
 			target = null
 
@@ -98,6 +101,11 @@ func _is_valid_target(candidate: Combatant) -> bool:
 	if candidate == null or not is_instance_valid(candidate) or not candidate.is_alive():
 		return false
 	return global_position.distance_to(candidate.global_position) <= data.aggro_range * 1.25
+
+
+## Target selection hook. Default: nearest opponent within aggro range.
+func _find_target() -> Combatant:
+	return _find_nearest_opponent()
 
 
 func _find_nearest_opponent() -> Combatant:
@@ -135,6 +143,16 @@ func _attack(other: Combatant) -> void:
 	match data.attack_type:
 		UnitData.AttackType.MELEE:
 			other.take_damage(attack_power, self)
+		UnitData.AttackType.RANGED:
+			_fire_projectile(other)
+
+
+func _fire_projectile(other: Combatant) -> void:
+	if _effects_layer == null:
+		return
+	var projectile := (load(PROJECTILE_SCENE_PATH) as PackedScene).instantiate() as Projectile
+	_effects_layer.add_child(projectile)
+	projectile.launch(global_position + Vector2(0, -6), other, attack_power, data.projectile_speed, self)
 
 
 static func compute_damage(raw_attack: int, target_defense: int) -> int:
@@ -150,8 +168,8 @@ func take_damage(raw_attack: int, source: Node = null) -> int:
 	hp -= amount
 	_visual.set_hp_ratio(float(hp) / float(max_hp))
 	_visual.play_hurt()
-	DamageNumber.spawn(_effects_layer, global_position + Vector2(0, -data.body_radius - 8), amount,
-			team == Team.ALLY)
+	FloatingText.spawn(_effects_layer, global_position + Vector2(0, -data.body_radius - 8), str(amount),
+			FloatingText.COLOR_DAMAGE_TO_ALLY if team == Team.ALLY else FloatingText.COLOR_DAMAGE_TO_ENEMY)
 	damaged.emit(self, amount)
 	if hp <= 0:
 		_die(source)

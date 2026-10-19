@@ -1,4 +1,4 @@
-[gd_scene load_steps=12 format=3]
+[gd_scene load_steps=16 format=3]
 
 [ext_resource type="Script" path="res://scripts/battle/battle_manager.gd" id="1_manager"]
 [ext_resource type="Script" path="res://scripts/battle/battle_clock.gd" id="2_clock"]
@@ -9,6 +9,10 @@
 [ext_resource type="Resource" path="res://resources/enemies/grunt.tres" id="7_grunt"]
 [ext_resource type="Resource" path="res://resources/units/soldier.tres" id="8_soldier"]
 [ext_resource type="PackedScene" path="res://scenes/ui/battle_ui.tscn" id="9_ui"]
+[ext_resource type="Script" path="res://scripts/battle/coin_wallet.gd" id="11_wallet"]
+[ext_resource type="Resource" path="res://resources/units/archer.tres" id="12_archer"]
+[ext_resource type="Resource" path="res://resources/units/shield.tres" id="13_shield"]
+[ext_resource type="Script" path="res://scripts/data/unit_data.gd" id="14_unit_data"]
 [ext_resource type="PackedScene" path="res://scenes/ui/result_ui.tscn" id="10_result"]
 
 [node name="Battle" type="Node2D"]
@@ -16,6 +20,9 @@ script = ExtResource("1_manager")
 
 [node name="BattleClock" type="Node" parent="."]
 script = ExtResource("2_clock")
+
+[node name="CoinWallet" type="Node" parent="."]
+script = ExtResource("11_wallet")
 
 [node name="Background" type="Node2D" parent="."]
 script = ExtResource("3_bg")
@@ -36,7 +43,7 @@ grunt_data = ExtResource("7_grunt")
 
 [node name="SummonManager" type="Node" parent="."]
 script = ExtResource("6_summon")
-auto_deploy_data = ExtResource("8_soldier")
+roster = Array[ExtResource("14_unit_data")]([ExtResource("8_soldier"), ExtResource("12_archer"), ExtResource("13_shield")])
 
 [node name="BattleUI" parent="." instance=ExtResource("9_ui")]
 

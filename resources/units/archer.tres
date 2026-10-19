@@ -1,0 +1,26 @@
+[gd_resource type="Resource" script_class="UnitData" load_steps=2 format=3]
+
+[ext_resource type="Script" path="res://scripts/data/unit_data.gd" id="1_data"]
+
+[resource]
+script = ExtResource("1_data")
+id = &"archer"
+display_name = "弓兵"
+description = "後方から矢で攻撃する。打たれ弱い。"
+max_hp = 55
+attack = 20
+defense = 0
+attack_interval = 1.3
+move_speed = 34.0
+attack_range = 120.0
+aggro_range = 160.0
+attack_type = 1
+projectile_speed = 260.0
+summon_cost = 30
+reward = 0
+placeholder_pattern = &"archer"
+body_color = Color(0.2, 0.55, 0.28, 1)
+accent_color = Color(0.55, 0.36, 0.18, 1)
+pixel_scale = 3
+body_radius = 14.0
+is_boss = false

@@ -1,53 +1,9 @@
 class_name CombatantVisual
 extends Node2D
 ## Visual for a Combatant. Uses UnitData.sprite_frames when provided; otherwise draws a
-## procedural pixel-art placeholder from PATTERNS. Animations (move bob, attack lunge,
+## procedural pixel-art placeholder (PixelArt). Animations (move bob, attack lunge,
 ## hurt flash, death fade) are tweens, so nothing here runs per frame.
 
-## 12-wide pixel maps. Keys: o outline, h helmet, s skin, g goblin skin, e eye,
-## r red eye, b body (UnitData.body_color), a accent (UnitData.accent_color), w weapon.
-const PATTERNS := {
-	&"soldier": [
-		"....oooo....",
-		"...ohhhho...",
-		"..ohhhhhho..",
-		"..osssssso..",
-		"..osesseso..",
-		"...osssso...",
-		"..oobbbboo.w",
-		".obbbaabbbow",
-		".osbbaabbsow",
-		".oobbbbbboow",
-		"...oaaaao.w.",
-		"...obbbbo...",
-		"...obo.obo..",
-		"...ooo.ooo..",
-	],
-	&"goblin": [
-		"...oooooo...",
-		"o.oggggggo.o",
-		"ogoggggggogo",
-		".ooggggggoo.",
-		"..ogrggrgo..",
-		"...oggggo...",
-		"..obbbbbbo..",
-		".obbabbabbo.",
-		"ogobbbbbbogo",
-		"..oaaaaaao..",
-		"..obbbbbbo..",
-		"..ogo..ogo..",
-		"..ooo..ooo..",
-	],
-}
-const FIXED_COLORS := {
-	"o": Color(0.08, 0.07, 0.1),
-	"h": Color(0.62, 0.66, 0.72),
-	"s": Color(0.96, 0.78, 0.6),
-	"g": Color(0.45, 0.72, 0.3),
-	"e": Color(0.1, 0.1, 0.15),
-	"r": Color(1.0, 0.25, 0.2),
-	"w": Color(0.86, 0.9, 0.95),
-}
 const HP_BAR_WIDTH := 22.0
 const HP_BAR_HEIGHT := 3.0
 
@@ -133,29 +89,14 @@ func _play_anim(anim: StringName) -> void:
 
 
 class _PixelBody extends Node2D:
-	var _rows: Array = []
-	var _palette: Dictionary = {}
-	var _scale: int = 2
+	var _data: UnitData
 
 	func configure(data: UnitData) -> void:
-		_rows = CombatantVisual.PATTERNS.get(data.placeholder_pattern, CombatantVisual.PATTERNS[&"soldier"])
-		_scale = maxi(1, data.pixel_scale)
-		_palette = CombatantVisual.FIXED_COLORS.duplicate()
-		_palette["b"] = data.body_color
-		_palette["a"] = data.accent_color
+		_data = data
 		queue_redraw()
 
 	func _draw() -> void:
-		var height := _rows.size()
-		var width := (_rows[0] as String).length() if height > 0 else 0
-		var origin := Vector2(-width * _scale * 0.5, -height * _scale * 0.5).floor()
-		for y in height:
-			var row: String = _rows[y]
-			for x in row.length():
-				var key := row[x]
-				if _palette.has(key):
-					draw_rect(Rect2(origin + Vector2(x * _scale, y * _scale), Vector2(_scale, _scale)),
-							_palette[key])
+		PixelArt.draw_unit(self, _data, Vector2.ZERO, maxi(1, _data.pixel_scale))
 
 
 class _HpBar extends Node2D:
