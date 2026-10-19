@@ -31,7 +31,7 @@ func refresh(title: String, level: int, current_effect: String, next_effect: Str
 		return
 	cost_label.text = "%dG" % cost
 	cost_label.add_theme_color_override("font_color", COST_OK if affordable else COST_NG)
-	effect_label.text = "%s → %s" % [current_effect, next_effect]
+	effect_label.text = "%s ＞ %s" % [current_effect, next_effect]
 	modulate = Color.WHITE if affordable else Color(0.75, 0.75, 0.75)
 
 

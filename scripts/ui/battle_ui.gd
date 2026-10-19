@@ -77,7 +77,7 @@ func set_time(seconds: float) -> void:
 
 
 func set_coins(coins: int) -> void:
-	coin_label.text = "● %d" % coins
+	coin_label.text = "%dG" % coins
 
 
 func setup_summon_buttons(roster: Array[UnitData]) -> void:
@@ -123,7 +123,7 @@ func is_upgrade_panel_open() -> bool:
 func set_upgrade_panel_open(open: bool) -> void:
 	upgrade_panel.visible = open
 	upgrade_toggle.set_pressed_no_signal(open)
-	upgrade_toggle.text = "強化 ▼" if open else "強化 ▲"
+	upgrade_toggle.text = "強化 ↓" if open else "強化 ↑"
 	_place_upgrade_panel()
 
 

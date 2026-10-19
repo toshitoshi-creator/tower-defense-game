@@ -90,7 +90,7 @@ layout_mode = 2
 size_flags_horizontal = 3
 theme_override_colors/font_color = Color(1, 0.85, 0.3, 1)
 theme_override_font_sizes/font_size = 20
-text = "● 0"
+text = "0G"
 horizontal_alignment = 1
 vertical_alignment = 1
 
@@ -180,7 +180,7 @@ custom_minimum_size = Vector2(88, 44)
 layout_mode = 2
 focus_mode = 0
 toggle_mode = true
-text = "強化 ▲"
+text = "強化 ↑"
 
 [node name="SummonRow" type="HBoxContainer" parent="Root/BottomPanel/Column"]
 layout_mode = 2

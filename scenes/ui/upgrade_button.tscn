@@ -50,5 +50,5 @@ grow_horizontal = 2
 grow_vertical = 0
 theme_override_colors/font_color = Color(0.75, 1, 0.75, 1)
 theme_override_font_sizes/font_size = 14
-text = "+0% → +15%"
+text = "+0% ＞ +15%"
 clip_text = true

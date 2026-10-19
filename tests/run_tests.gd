@@ -470,9 +470,9 @@ func test_kill_reward_paid_once_with_many_attackers() -> void:
 func test_coin_hud_and_reset_values() -> void:
 	var b := await _start_battle()
 	_check(b.wallet.coins == b.wallet.starting_coins, "battle starts with starting coins")
-	_check(b.battle_ui.coin_label.text == "● %d" % b.wallet.coins, "HUD shows coins")
+	_check(b.battle_ui.coin_label.text == "%dG" % b.wallet.coins, "HUD shows coins")
 	b.wallet.add_reward(12)
-	_check(b.battle_ui.coin_label.text == "● %d" % (b.wallet.starting_coins + 12), "HUD updates")
+	_check(b.battle_ui.coin_label.text == "%dG" % (b.wallet.starting_coins + 12), "HUD updates")
 	b.wallet.reward_multiplier = 1.5
 	_check(b.wallet.add_reward(5) == 8, "reward multiplier rounds")
 
@@ -898,6 +898,8 @@ func test_unit_animation_follows_state() -> void:
 	var enemy := _enemy(Vector2(195, b.layout.ally_spawn_y - 40))
 	enemy.data = GRUNT.duplicate()
 	enemy.data.move_speed = 0.0
+	# Keep the goblin from swinging: its hit would replace the attack anim with hurt.
+	enemy._attack_cooldown = 1000.0
 	var saw_attack := false
 	for i in 90:
 		await physics_frame
@@ -1057,6 +1059,29 @@ func test_pixel_patterns_are_rectangular() -> void:
 				"%s placeholder exists" % (d as UnitData).id)
 
 
+func test_bundled_font_has_every_displayed_character() -> void:
+	# Web builds have no system-font fallback: a glyph missing from the bundled font
+	# shows as a box. Scan every string the game can display.
+	var font := load("res://assets/fonts/DotGothic16-Japanese.woff2") as FontFile
+	var files := _collect_files("res://scripts", ["gd"])
+	files.append_array(_collect_files("res://scenes", ["tscn"]))
+	files.append_array(_collect_files("res://resources", ["tres"]))
+	var missing := {}
+	var checked := 0
+	for f in files:
+		for line in FileAccess.get_file_as_string(f).split("\n"):
+			if line.strip_edges().begins_with("#"):
+				continue
+			for i in line.length():
+				var code := line.unicode_at(i)
+				if code > 127:
+					checked += 1
+					if not font.has_char(code):
+						missing[line[i]] = f
+	_check(checked > 100, "scanned displayed text (%d chars)" % checked)
+	_check(missing.is_empty(), "glyphs missing from the font: %s" % [missing])
+
+
 func test_all_res_paths_exist() -> void:
 	var regex := RegEx.create_from_string("res://[A-Za-z0-9_./-]+")
 	var files := _collect_files("res://", ["gd", "tscn", "tres", "godot", "cfg"])
@@ -1067,7 +1092,7 @@ func test_all_res_paths_exist() -> void:
 			var path := m.get_string().trim_suffix(".")
 			if path.ends_with("/"):
 				continue
-			_check(FileAccess.file_exists(path) or ResourceLoader.exists(path),
+			_check(FileAccess.file_exists(path) or ResourceLoader.exists(path) or DirAccess.dir_exists_absolute(path),
 					"%s references missing %s" % [f, path])
 
 
