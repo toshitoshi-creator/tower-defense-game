@@ -1,0 +1,28 @@
+[gd_resource type="Resource" script_class="UnitData" load_steps=2 format=3]
+
+[ext_resource type="Script" path="res://scripts/data/unit_data.gd" id="1_data"]
+
+[resource]
+script = ExtResource("1_data")
+id = &"heavy"
+display_name = "重装兵"
+description = "とても硬い守備兵。防衛線を支える。"
+max_hp = 420
+attack = 8
+defense = 6
+attack_interval = 1.4
+move_speed = 22.0
+attack_range = 4.0
+aggro_range = 100.0
+attack_type = 0
+projectile_speed = 220.0
+splash_radius = 0.0
+role = 1
+summon_cost = 40
+reward = 0
+placeholder_pattern = &"heavy"
+body_color = Color(0.35, 0.35, 0.4, 1)
+accent_color = Color(0.5, 0.5, 0.55, 1)
+pixel_scale = 3
+body_radius = 14.0
+is_boss = false

@@ -1,0 +1,28 @@
+[gd_resource type="Resource" script_class="UnitData" load_steps=2 format=3]
+
+[ext_resource type="Script" path="res://scripts/data/unit_data.gd" id="1_data"]
+
+[resource]
+script = ExtResource("1_data")
+id = &"knight"
+display_name = "騎士"
+description = "速くて硬い突撃兵。"
+max_hp = 210
+attack = 22
+defense = 2
+attack_interval = 1.0
+move_speed = 50.0
+attack_range = 4.0
+aggro_range = 120.0
+attack_type = 0
+projectile_speed = 220.0
+splash_radius = 0.0
+role = 0
+summon_cost = 45
+reward = 0
+placeholder_pattern = &"knight"
+body_color = Color(0.25, 0.3, 0.75, 1)
+accent_color = Color(0.9, 0.2, 0.25, 1)
+pixel_scale = 3
+body_radius = 14.0
+is_boss = false

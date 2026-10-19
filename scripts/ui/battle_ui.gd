@@ -16,6 +16,7 @@ signal layout_changed
 @onready var root: Control = $Root
 @onready var top_bar: Control = $Root/TopBar
 @onready var bottom_panel: Control = $Root/BottomPanel
+@onready var stage_label: Label = $Root/TopBar/Stack/Row/StageLabel
 @onready var time_label: Label = $Root/TopBar/Stack/Row/TimeLabel
 @onready var coin_label: Label = $Root/TopBar/Stack/Row/CoinLabel
 @onready var kills_label: Label = $Root/TopBar/Stack/Row/KillsLabel
@@ -74,6 +75,10 @@ func get_field_bottom() -> float:
 
 func set_time(seconds: float) -> void:
 	time_label.text = BattleClock.format_time(seconds)
+
+
+func set_stage_name(text_value: String) -> void:
+	stage_label.text = text_value
 
 
 func set_coins(coins: int) -> void:

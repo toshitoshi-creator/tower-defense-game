@@ -1,0 +1,28 @@
+[gd_resource type="Resource" script_class="UnitData" load_steps=2 format=3]
+
+[ext_resource type="Script" path="res://scripts/data/unit_data.gd" id="1_data"]
+
+[resource]
+script = ExtResource("1_data")
+id = &"mage"
+display_name = "魔法使い"
+description = "魔法弾で着弾点の周りの敵をまとめて攻撃する。"
+max_hp = 50
+attack = 24
+defense = 0
+attack_interval = 1.8
+move_speed = 30.0
+attack_range = 130.0
+aggro_range = 165.0
+attack_type = 1
+projectile_speed = 220.0
+splash_radius = 36.0
+role = 2
+summon_cost = 45
+reward = 0
+placeholder_pattern = &"mage"
+body_color = Color(0.45, 0.25, 0.7, 1)
+accent_color = Color(0.95, 0.8, 0.3, 1)
+pixel_scale = 3
+body_radius = 14.0
+is_boss = false

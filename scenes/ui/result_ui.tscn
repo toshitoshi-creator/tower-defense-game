@@ -1,9 +1,13 @@
-[gd_scene load_steps=3 format=3]
+[gd_scene load_steps=5 format=3]
 
 [ext_resource type="Script" path="res://scripts/ui/result_ui.gd" id="1_result"]
+[ext_resource type="Script" path="res://scripts/ui/roulette_wheel.gd" id="2_wheel"]
 
 [sub_resource type="StyleBoxFlat" id="dim"]
 bg_color = Color(0, 0, 0, 0.65)
+
+[sub_resource type="StyleBoxFlat" id="rank_fill"]
+bg_color = Color(0.4, 0.75, 1, 1)
 
 [node name="ResultUI" type="CanvasLayer"]
 process_mode = 3
@@ -28,53 +32,114 @@ grow_horizontal = 2
 grow_vertical = 2
 
 [node name="Panel" type="PanelContainer" parent="Dim/Center"]
-custom_minimum_size = Vector2(280, 0)
+custom_minimum_size = Vector2(320, 0)
 layout_mode = 2
 
 [node name="Column" type="VBoxContainer" parent="Dim/Center/Panel"]
 layout_mode = 2
-theme_override_constants/separation = 12
+theme_override_constants/separation = 6
 
 [node name="TitleLabel" type="Label" parent="Dim/Center/Panel/Column"]
 layout_mode = 2
-theme_override_font_sizes/font_size = 40
+theme_override_font_sizes/font_size = 36
 text = "敗北…"
 horizontal_alignment = 1
 
 [node name="TimeLabel" type="Label" parent="Dim/Center/Panel/Column"]
 layout_mode = 2
-theme_override_font_sizes/font_size = 20
 text = "戦闘時間  00:00"
 horizontal_alignment = 1
 
 [node name="KillsLabel" type="Label" parent="Dim/Center/Panel/Column"]
 layout_mode = 2
-theme_override_font_sizes/font_size = 20
 text = "撃破数  0"
 horizontal_alignment = 1
 
 [node name="CoinsLabel" type="Label" parent="Dim/Center/Panel/Column"]
 layout_mode = 2
-theme_override_font_sizes/font_size = 20
-text = "獲得コイン  0"
+text = "戦闘で得たコイン  0"
 horizontal_alignment = 1
 
 [node name="BossLabel" type="Label" parent="Dim/Center/Panel/Column"]
 layout_mode = 2
-theme_override_font_sizes/font_size = 20
-text = "ボス撃破  0"
+text = "中ボス撃破  0 / 4
+最終ボス  未撃破"
 horizontal_alignment = 1
 
-[node name="RetryButton" type="Button" parent="Dim/Center/Panel/Column"]
-custom_minimum_size = Vector2(0, 56)
+[node name="RewardBox" type="VBoxContainer" parent="Dim/Center/Panel/Column"]
+visible = false
 layout_mode = 2
-focus_mode = 0
-theme_override_font_sizes/font_size = 22
-text = "リトライ"
+theme_override_constants/separation = 6
 
-[node name="TitleButton" type="Button" parent="Dim/Center/Panel/Column"]
+[node name="Wheel" type="Control" parent="Dim/Center/Panel/Column/RewardBox"]
+custom_minimum_size = Vector2(190, 190)
+layout_mode = 2
+size_flags_horizontal = 4
+script = ExtResource("2_wheel")
+
+[node name="SpinButton" type="Button" parent="Dim/Center/Panel/Column/RewardBox"]
 custom_minimum_size = Vector2(0, 52)
 layout_mode = 2
 focus_mode = 0
 theme_override_font_sizes/font_size = 20
-text = "タイトルに戻る"
+text = "ルーレットを回す"
+
+[node name="PrizeLabel" type="Label" parent="Dim/Center/Panel/Column/RewardBox"]
+layout_mode = 2
+theme_override_colors/font_color = Color(1, 0.85, 0.3, 1)
+theme_override_font_sizes/font_size = 22
+text = "コイン +300"
+horizontal_alignment = 1
+
+[node name="RankLabel" type="Label" parent="Dim/Center/Panel/Column/RewardBox"]
+layout_mode = 2
+text = "ランク 1   EXP +120"
+horizontal_alignment = 1
+
+[node name="RankBar" type="ProgressBar" parent="Dim/Center/Panel/Column/RewardBox"]
+custom_minimum_size = Vector2(0, 10)
+layout_mode = 2
+theme_override_styles/fill = SubResource("rank_fill")
+max_value = 1.0
+show_percentage = false
+
+[node name="RankUpLabel" type="Label" parent="Dim/Center/Panel/Column/RewardBox"]
+layout_mode = 2
+theme_override_colors/font_color = Color(0.5, 1, 0.6, 1)
+text = "ランクアップ！"
+horizontal_alignment = 1
+autowrap_mode = 3
+
+[node name="DefeatHint" type="Label" parent="Dim/Center/Panel/Column"]
+custom_minimum_size = Vector2(280, 0)
+layout_mode = 2
+theme_override_colors/font_color = Color(0.8, 0.8, 0.75, 1)
+theme_override_font_sizes/font_size = 14
+text = "クリアするとランクEXPとルーレット報酬がもらえます"
+horizontal_alignment = 1
+autowrap_mode = 3
+
+[node name="StageSelectButton" type="Button" parent="Dim/Center/Panel/Column"]
+custom_minimum_size = Vector2(0, 52)
+layout_mode = 2
+focus_mode = 0
+theme_override_font_sizes/font_size = 20
+text = "ステージ選択へ"
+
+[node name="Row" type="HBoxContainer" parent="Dim/Center/Panel/Column"]
+layout_mode = 2
+theme_override_constants/separation = 8
+
+[node name="RetryButton" type="Button" parent="Dim/Center/Panel/Column/Row"]
+custom_minimum_size = Vector2(0, 48)
+layout_mode = 2
+size_flags_horizontal = 3
+focus_mode = 0
+text = "もう一度"
+
+[node name="TitleButton" type="Button" parent="Dim/Center/Panel/Column/Row"]
+custom_minimum_size = Vector2(0, 48)
+layout_mode = 2
+size_flags_horizontal = 3
+focus_mode = 0
+text = "ホームへ"

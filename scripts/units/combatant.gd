@@ -168,6 +168,8 @@ func _attack(other: Combatant) -> void:
 				other.take_damage(attack_power, self)
 		UnitData.AttackType.RANGED:
 			_fire_projectile(other)
+		UnitData.AttackType.HEAL:
+			other.heal(attack_power)
 
 
 func _cleave(primary: Combatant) -> void:
@@ -185,6 +187,22 @@ func _fire_projectile(other: Combatant) -> void:
 	var projectile := (load(PROJECTILE_SCENE_PATH) as PackedScene).instantiate() as Projectile
 	_effects_layer.add_child(projectile)
 	projectile.launch(global_position + Vector2(0, -6), other, attack_power, data.projectile_speed, self)
+	projectile.splash_radius = data.splash_radius
+	projectile.splash_group = get_opponent_group()
+
+
+## Restores HP (healer allies). Returns the amount actually healed.
+func heal(amount: int) -> int:
+	if state == State.DEAD or amount <= 0:
+		return 0
+	var healed := mini(amount, max_hp - hp)
+	if healed <= 0:
+		return 0
+	hp += healed
+	_visual.set_hp_ratio(float(hp) / float(max_hp))
+	FloatingText.spawn(_effects_layer, global_position + Vector2(0, -data.body_radius - 8), "+%d" % healed,
+			FloatingText.COLOR_UPGRADE)
+	return healed
 
 
 static func compute_damage(raw_attack: int, target_defense: int) -> int:

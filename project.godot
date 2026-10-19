@@ -10,6 +10,10 @@ config/description="縦型ピクセルアート・タワーディフェンス"
 run/main_scene="res://scenes/title/title.tscn"
 config/features=PackedStringArray("4.3", "GL Compatibility")
 
+[autoload]
+
+Player="*res://scripts/meta/player_data.gd"
+
 [display]
 
 window/size/viewport_width=390

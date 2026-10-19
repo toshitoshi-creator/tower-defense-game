@@ -6,8 +6,8 @@ extends Combatant
 ##   with nothing to fight it returns to the rally point in front of the base.
 ## - GUARD (shield): holds a post on the defense line (posts are spread evenly across
 ##   the width); engages enemies near its post or enemies attacking a nearby ally.
-## - SUPPORT (archer): stands behind the assault line and attacks only what is in
-##   range; it never steps forward to chase.
+## - SUPPORT (archer, mage, healer): stands behind the assault line and acts only on
+##   what is in range; it never steps forward to chase. Healers target hurt allies.
 
 ## Guards engage enemies this close to their post...
 const GUARD_RADIUS := 110.0
@@ -21,6 +21,9 @@ const SUPPORT_BEHIND := 70.0
 const HOME_SPREAD := 70.0
 const ARRIVE_DISTANCE := 3.0
 
+## Character level bonus (gacha duplicates), multiplied into HP and attack.
+var level_bonus: float = 1.0
+
 var _hunting: bool = false
 var _home_offset: Vector2 = Vector2.ZERO
 ## Where this unit stands when it has nothing in reach (refreshed at retarget time).
@@ -28,13 +31,23 @@ var _station: Vector2 = Vector2.ZERO
 
 
 func setup_ally(unit_data: UnitData, battle_layout: BattleLayout, effects_layer: Node,
-		hp_multiplier: float = 1.0, attack_multiplier: float = 1.0) -> void:
-	setup(unit_data, Team.ALLY, battle_layout, effects_layer, hp_multiplier, attack_multiplier)
+		hp_multiplier: float = 1.0, attack_multiplier: float = 1.0, character_bonus: float = 1.0) -> void:
+	level_bonus = character_bonus
+	setup(unit_data, Team.ALLY, battle_layout, effects_layer,
+			hp_multiplier * level_bonus, attack_multiplier * level_bonus)
 	_home_offset = Vector2(randf_range(-HOME_SPREAD, HOME_SPREAD), randf_range(-12.0, 12.0))
 
 
 func get_station() -> Vector2:
 	return _station
+
+
+func set_stat_multipliers(hp_multiplier: float, attack_multiplier: float) -> void:
+	super.set_stat_multipliers(hp_multiplier * level_bonus, attack_multiplier * level_bonus)
+
+
+func is_healer() -> bool:
+	return data.attack_type == UnitData.AttackType.HEAL
 
 
 func _find_target() -> Combatant:
@@ -45,7 +58,7 @@ func _find_target() -> Combatant:
 			return _find_guard_target()
 		UnitData.Role.SUPPORT:
 			_hunting = false
-			return _find_nearest_opponent()
+			return _find_heal_target() if is_healer() else _find_nearest_opponent()
 	var local := _find_nearest_opponent()
 	_hunting = local == null
 	if local != null:
@@ -63,6 +76,9 @@ func _is_valid_target(candidate: Combatant) -> bool:
 		UnitData.Role.GUARD:
 			return candidate.global_position.distance_to(_station) <= GUARD_LEASH
 		UnitData.Role.SUPPORT:
+			if is_healer():
+				return candidate.team == Team.ALLY and candidate.hp < candidate.max_hp \
+						and global_position.distance_to(candidate.global_position) <= data.aggro_range * 1.25
 			return super._is_valid_target(candidate)
 	if _hunting:
 		return candidate.position.y >= layout.assault_limit_y - 40.0
@@ -154,6 +170,23 @@ func _find_guard_target() -> Combatant:
 		if dist < best_dist:
 			best_dist = dist
 			best = enemy
+	return best
+
+
+## The most hurt ally (by HP ratio) within aggro range, including itself.
+func _find_heal_target() -> Combatant:
+	var best: Combatant = null
+	var best_ratio := 1.0
+	for node in get_tree().get_nodes_in_group(&"allies"):
+		var ally := node as Combatant
+		if ally == null or not ally.is_alive() or ally.hp >= ally.max_hp:
+			continue
+		if global_position.distance_to(ally.global_position) > data.aggro_range:
+			continue
+		var ratio := float(ally.hp) / float(ally.max_hp)
+		if ratio < best_ratio:
+			best_ratio = ratio
+			best = ally
 	return best
 
 

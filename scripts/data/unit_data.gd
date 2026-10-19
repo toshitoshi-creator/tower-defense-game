@@ -3,7 +3,8 @@ extends Resource
 ## Data definition shared by allies and enemies.
 ## Adding a new unit type = adding a new .tres file; combat logic lives in Combatant.
 
-enum AttackType { MELEE, RANGED }
+## HEAL: restores attack points of HP to a damaged ally instead of attacking.
+enum AttackType { MELEE, RANGED, HEAL }
 ## How an allied unit positions itself (enemies ignore it).
 ## ASSAULT: hunts enemies, returns to the rally point when the field is clear.
 ## GUARD: holds a post on the defense line; engages enemies near the base or
@@ -31,6 +32,8 @@ enum Role { ASSAULT, GUARD, SUPPORT }
 @export var role: Role = Role.ASSAULT
 ## RANGED only: projectile flight speed in pixels per second.
 @export var projectile_speed: float = 260.0
+## RANGED only: >0 makes the projectile also hit every enemy this close to the impact.
+@export var splash_radius: float = 0.0
 
 @export_group("Economy")
 @export var summon_cost: int = 0

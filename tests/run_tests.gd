@@ -23,6 +23,15 @@ const UP_BASE := 4
 const UP_COIN := 5
 const FPS := 60
 
+const TEST_SAVE := "user://test_save.json"
+const STAGE_1: StageData = preload("res://resources/stages/stage_1.tres")
+const STAGE_2: StageData = preload("res://resources/stages/stage_2.tres")
+const SPEARMAN: UnitData = preload("res://resources/units/spearman.tres")
+const MAGE: UnitData = preload("res://resources/units/mage.tres")
+const HEALER: UnitData = preload("res://resources/units/healer.tres")
+
+## The Player autoload (not a compile-time name inside a -s script).
+var P: Node
 var _failures: Array[String] = []
 var _current := ""
 var _battle: BattleManager
@@ -33,6 +42,8 @@ func _initialize() -> void:
 	await process_frame
 	root.size = Vector2i(390, 844)
 	await process_frame
+	P = root.get_node("Player")
+	P.use_storage(TEST_SAVE)  # Never touch the real save.
 	var tests: Array[String] = []
 	for m in get_method_list():
 		var method_name: String = m["name"]
@@ -46,6 +57,8 @@ func _initialize() -> void:
 			continue
 		_current = test_name
 		var before := _failures.size()
+		P.reset_progress()
+		P.current_stage_id = "stage_1"
 		await call(test_name)
 		await _teardown()
 		if _failures.size() == before:
@@ -58,6 +71,7 @@ func _initialize() -> void:
 	for f in _failures:
 		print("    - ", f)
 	print("RESULT: %d passed, %d failed" % [passed, failed])
+	DirAccess.remove_absolute(ProjectSettings.globalize_path(TEST_SAVE))
 	quit(1 if failed > 0 else 0)
 
 
@@ -132,7 +146,7 @@ func test_auto_spawn_creates_enemies_but_no_free_allies() -> void:
 
 func test_enemy_moves_down_and_ally_moves_up() -> void:
 	var b := await _start_battle()
-	var enemy := _enemy(Vector2(40, b.layout.spawn_y))
+	var enemy := _enemy(Vector2(40, b.layout.assault_limit_y + 10.0))  # Past the front line.
 	var ally := _ally(Vector2(350, b.layout.ally_spawn_y))
 	var enemy_y := enemy.position.y
 	var ally_y := ally.position.y
@@ -238,7 +252,7 @@ func test_archers_stay_behind_engaged_soldiers() -> void:
 func test_archer_does_not_chase_out_of_range() -> void:
 	var b := await _start_battle()
 	var archer := _ally(Vector2(195, b.layout.ally_spawn_y), ARCHER)
-	await _seconds(2.0)
+	await _seconds(5.0)  # Walk to its spread-out home spot first.
 	var home := archer.position
 	var enemy := _enemy(Vector2(195, b.layout.spawn_y + 20.0))
 	enemy.data = GRUNT.duplicate()  # Never edit the shared resource.
@@ -789,6 +803,9 @@ func _play_balanced(b: BattleManager, limit: float) -> int:
 
 
 func test_full_battle_reaches_final_boss() -> void:
+	# A player after a few clears: one permanent level in attack, HP and summon speed.
+	for id in ["ally_attack", "ally_hp", "summon_speed"]:
+		P.permanent[id] = 1
 	var b := await _start_battle(false)
 	var bought := await _play_balanced(b, 8.0 * 60.0)
 	print("        balanced bot: %s at %s, kills=%d, upgrades=%d, mid bosses %d/4, final %s" % [
@@ -1021,18 +1038,21 @@ func test_effects_are_capped() -> void:
 
 
 func test_title_screen_starts_battle_and_result_returns_to_title() -> void:
-	# Real scene flow: title -> battle -> result -> title.
+	# Real scene flow: home -> stage select -> battle -> result -> home.
 	change_scene_to_file("res://scenes/title/title.tscn")
 	await _frames(3)
 	var title := current_scene
-	_check(title != null and title.name == "Title", "title scene loaded")
-	var start: Button = title.get_node("Margin/Column/StartButton")
-	_check(get_root().get_visible_rect().encloses(start.get_global_rect()), "start button on screen")
-	_check(start.size.y >= 48.0, "start button is a big tap target")
+	_check(title != null and title.name == "Title", "home scene loaded")
+	var start: Button = title.start_button
+	_check(get_root().get_visible_rect().encloses(start.get_global_rect()), "stage select button on screen")
+	_check(start.size.y >= 48.0, "stage select button is a big tap target")
 	await _tap(start.get_global_rect().get_center())
 	await _frames(3)
+	_check(current_scene.name == "StageSelect", "home opens stage select")
+	await _tap(current_scene.sortie_buttons["stage_1"].get_global_rect().get_center())
+	await _frames(3)
 	var b := current_scene as BattleManager
-	_check(b != null and b.phase == BattleManager.Phase.RUNNING, "tapping start begins a battle")
+	_check(b != null and b.phase == BattleManager.Phase.RUNNING, "tapping 出撃 begins a battle")
 	if b == null:
 		return
 	_battle = b
@@ -1041,8 +1061,8 @@ func test_title_screen_starts_battle_and_result_returns_to_title() -> void:
 	await _wait_result(b)
 	await _tap(b.result_ui.title_button.get_global_rect().get_center())
 	await _frames(3)
-	_check(current_scene != null and current_scene.name == "Title", "result screen returns to title")
-	_check(not paused, "title is not paused")
+	_check(current_scene != null and current_scene.name == "Title", "result screen returns home")
+	_check(not paused, "home is not paused")
 	_battle = null
 	current_scene.queue_free()
 	await _frames(2)
@@ -1058,6 +1078,320 @@ func test_pause_menu_can_return_to_title() -> void:
 	_battle = null
 	current_scene.queue_free()
 	await _frames(2)
+
+
+# ---------------------------------------------------------------- meta game
+
+func test_save_round_trip_and_corrupt_file() -> void:
+	P.add_coins(1234)
+	P.add_orbs(70)
+	P.add_orbs(30, true)
+	P.characters["mage"] = 3
+	P.set_deck(["mage", "soldier", "shield"] as Array[String], false)
+	P.cleared_stages.append("stage_1")
+	P.permanent["ally_attack"] = 2
+	P.save_game()
+	P.use_storage(TEST_SAVE)
+	_check(P.coins == 1234 and P.orbs_free == 70 and P.orbs_paid == 30, "currencies persist")
+	_check(P.character_level("mage") == 3, "characters persist")
+	_check(P.deck == (["mage", "soldier", "shield"] as Array[String]), "deck persists: %s" % [P.deck])
+	_check(P.is_stage_cleared("stage_1") and P.permanent_level("ally_attack") == 2, "progress persists")
+	var f := FileAccess.open(TEST_SAVE, FileAccess.WRITE)
+	f.store_string("{not json")
+	f.close()
+	P.use_storage(TEST_SAVE)
+	_check(P.coins == 0 and P.rank == 1 and P.deck.size() == 3, "corrupt save falls back to a fresh start")
+	f = FileAccess.open(TEST_SAVE, FileAccess.WRITE)
+	f.store_string(JSON.stringify({"coins": -50, "characters": {"mage": 99, "hacker": 5}, "deck": ["mage", "mage", "x"]}))
+	f.close()
+	P.use_storage(TEST_SAVE)
+	_check(P.coins == 0, "negative coins clamped")
+	_check(P.character_level("mage") == GameCatalog.MAX_CHARACTER_LEVEL and not P.owns("hacker"), "levels clamped, unknown ids dropped")
+	_check(P.deck == (GameCatalog.STARTER_CHARACTERS as Array[String]) or P.deck.size() == 3, "invalid deck replaced")
+
+
+func test_rank_up_pays_coins_and_orbs() -> void:
+	_check(GameCatalog.exp_to_next_rank(1) == 100 and GameCatalog.exp_to_next_rank(2) == 150, "rank table")
+	var ups: Array[Dictionary] = P.add_rank_exp(120)
+	_check(P.rank == 2 and P.rank_exp == 20, "rank 2 with 20 exp (rank %d exp %d)" % [P.rank, P.rank_exp])
+	_check(ups.size() == 1 and ups[0]["coins"] == 300 and ups[0]["orbs"] == 50, "rank-up reward %s" % [ups])
+	_check(P.coins == 300 and P.get_orbs() == 50, "reward paid")
+	ups = P.add_rank_exp(1000)
+	_check(ups.size() >= 3 and P.rank == 2 + ups.size(), "several rank-ups at once (%d)" % ups.size())
+
+
+func test_roulette_odds_and_prizes() -> void:
+	P.rng.seed = 12345
+	var counts := {}
+	var n := 20000
+	for i in n:
+		var seg: int = P.spin_roulette()
+		counts[seg] = counts.get(seg, 0) + 1
+	var total := 0
+	for e in GameCatalog.ROULETTE:
+		total += int(e["weight"])
+	for i in GameCatalog.ROULETTE.size():
+		var expected := float(GameCatalog.ROULETTE[i]["weight"]) / total
+		var got := float(counts.get(i, 0)) / n
+		_check(absf(got - expected) < 0.012, "segment %d: %.3f vs %.3f" % [i, got, expected])
+	var orb_seg := GameCatalog.ROULETTE.size() - 1
+	_check(GameCatalog.ROULETTE[orb_seg]["orbs"] > 0 and GameCatalog.ROULETTE[orb_seg]["weight"] <= 10, "orbs are a rare segment")
+	_check(P.roulette_prize(0, STAGE_1)["coins"] == 100 and P.roulette_prize(0, STAGE_2)["coins"] == 150,
+			"stage 2 multiplies roulette coins")
+
+
+func test_wheel_lands_on_the_decided_segment() -> void:
+	var b := await _start_battle()
+	var wheel: RouletteWheel = b.result_ui.wheel
+	for seg in GameCatalog.ROULETTE.size():
+		wheel.spin = randf() * TAU
+		wheel.spin_to(seg, 0.2)
+		await _seconds(0.35)
+		_check(wheel.segment_at_pointer() == seg, "wheel stops on segment %d (got %d)" % [seg, wheel.segment_at_pointer()])
+
+
+func test_victory_grants_rewards_once_and_unlocks_stage_2() -> void:
+	_check(not P.is_stage_unlocked("stage_2"), "stage 2 starts locked")
+	var b := await _start_battle()
+	b.notify_final_boss_defeated()
+	await _frames(2)
+	var r: Dictionary = b.clear_rewards
+	_check(not r.is_empty() and b.roulette_segment >= 0, "rewards decided at victory")
+	_check(P.is_stage_cleared("stage_1") and P.is_stage_unlocked("stage_2"), "stage 2 unlocked")
+	_check(r["first_clear"] and r["exp"] == STAGE_1.clear_exp, "first clear exp")
+	_check(r["unlocked_stage"] == STAGE_2.display_name, "names the unlocked stage")
+	var prize: Dictionary = P.roulette_prize(b.roulette_segment, STAGE_1)
+	var rank_coins := 0
+	var rank_orbs := 0
+	for up in r["rank_ups"]:
+		rank_coins += up["coins"]
+		rank_orbs += up["orbs"]
+	_check(P.coins == prize["coins"] + rank_coins and P.get_orbs() == prize["orbs"] + rank_orbs,
+			"coins/orbs = roulette + rank-ups (coins %d orbs %d)" % [P.coins, P.get_orbs()])
+	var saved_coins: int = P.coins
+	P.use_storage(TEST_SAVE)
+	_check(P.coins == saved_coins and P.is_stage_cleared("stage_1"), "rewards were saved immediately")
+	await _wait_result(b)
+	_check(b.result_ui.reward_box.visible, "roulette shown on victory")
+	await _tap(b.result_ui.spin_button.get_global_rect().get_center())
+	await _seconds(3.0)
+	_check(b.result_ui.wheel.segment_at_pointer() == b.roulette_segment, "wheel shows the granted segment")
+	_check(b.result_ui.prize_label.text != "？", "prize revealed: %s" % b.result_ui.prize_label.text)
+	_check(b.result_ui.rank_up_label.text.contains("解放"), "unlock announced: %s" % b.result_ui.rank_up_label.text)
+	b.result_ui.spin_button.pressed.emit()
+	b.notify_final_boss_defeated()
+	await _frames(2)
+	_check(P.coins == saved_coins, "no second grant")
+
+
+func test_defeat_grants_nothing() -> void:
+	var b := await _start_battle()
+	b.base.take_damage(b.base.hp)
+	await _frames(2)
+	await _wait_result(b)
+	_check(P.coins == 0 and P.rank_exp == 0 and not P.is_stage_cleared("stage_1"), "no rewards on defeat")
+	_check(not b.result_ui.reward_box.visible and b.result_ui.defeat_hint.visible, "defeat hint instead of roulette")
+
+
+func test_stage_2_battle_uses_stage_settings() -> void:
+	P.current_stage_id = "stage_2"
+	var b := await _start_battle()
+	_check(b.stage == STAGE_2, "stage 2 loaded")
+	_check(is_equal_approx(b.spawner.enemy_stat_multiplier, STAGE_2.enemy_stat_multiplier), "enemy multiplier")
+	_check(b.battle_ui.stage_label.text == "STAGE 2", "HUD shows the stage")
+	var grunt := b.spawner.spawn_enemy(GRUNT, b.spawner.current_stat_multiplier())
+	_check(grunt.max_hp == roundi(GRUNT.max_hp * STAGE_2.enemy_stat_multiplier), "enemies are tougher (%d)" % grunt.max_hp)
+	b.clock.elapsed = 60.0
+	await _frames(2)
+	_check(b.active_bosses.size() == 1 and b.active_bosses[0].max_hp == roundi(OGRE.max_hp * STAGE_2.enemy_stat_multiplier),
+			"bosses are tougher too")
+
+
+func test_stage_select_locks_and_starts_battles() -> void:
+	change_scene_to_file("res://scenes/meta/stage_select.tscn")
+	await _frames(3)
+	var screen := current_scene
+	var b1: Button = screen.sortie_buttons["stage_1"]
+	var b2: Button = screen.sortie_buttons["stage_2"]
+	_check(not b1.disabled and b2.disabled, "only stage 1 is open")
+	_check(screen.status_labels["stage_2"].text == "ステージ1をクリアで解放", "lock reason shown")
+	P.cleared_stages.append("stage_1")
+	P.save_game()
+	await _frames(1)
+	_check(not b2.disabled, "stage 2 opens once stage 1 is cleared")
+	await _tap(b2.get_global_rect().get_center())
+	await _frames(3)
+	var b := current_scene as BattleManager
+	_check(b != null and b.stage == STAGE_2, "tapping 出撃 starts stage 2")
+	_battle = b
+
+
+func test_home_menu_opens_every_screen() -> void:
+	for entry in [["ステージ選択", "StageSelect"], ["編成", "Deck"], ["強化", "Upgrades"], ["ガチャ", "Gacha"], ["ショップ", "Shop"]]:
+		change_scene_to_file("res://scenes/title/title.tscn")
+		await _frames(3)
+		var home := current_scene
+		var button: Button = home.start_button if entry[0] == "ステージ選択" else home.menu_buttons[entry[0]]
+		_check(get_root().get_visible_rect().encloses(button.get_global_rect()) and button.size.y >= 48.0,
+				"%s button on screen and tappable" % entry[0])
+		await _tap(button.get_global_rect().get_center())
+		await _frames(3)
+		_check(current_scene != null and current_scene.name == entry[1], "%s opens (%s)" % [entry[0], current_scene.name])
+		if current_scene is MetaScreen:
+			var back: Button = current_scene.back_button
+			await _tap(back.get_global_rect().get_center())
+			await _frames(3)
+			_check(current_scene.name == "Title", "back returns home from %s (now %s, paused=%s)" % [entry[1], current_scene.name, paused])
+	current_scene.queue_free()
+	await _frames(2)
+
+
+func test_gacha_new_duplicate_and_costs() -> void:
+	_check(P.draw_gacha(1).is_empty() and P.get_orbs() == 0, "no orbs: nothing drawn, nothing spent")
+	var total := 0
+	for e in GameCatalog.GACHA_POOL:
+		total += int(e["weight"])
+		_check(GameCatalog.CHARACTERS.has(e["id"]), "pool entry %s exists" % e["id"])
+	_check(total == 100, "rates add up to 100%")
+	P.add_orbs(30)
+	P.add_orbs(1000, true)
+	P.rng.seed = 7
+	var results: Array[Dictionary] = P.draw_gacha(10)
+	_check(results.size() == 10, "ten results")
+	_check(P.get_orbs() == 1030 - GameCatalog.GACHA_TEN_COST and P.orbs_free == 0, "450 spent, free orbs first")
+	for r in results:
+		_check(P.owns(r["id"]) and P.character_level(r["id"]) >= 1, "%s in collection" % r["id"])
+	# Duplicates level up; past max they become coins.
+	P.characters["soldier"] = GameCatalog.MAX_CHARACTER_LEVEL - 1
+	var lv_before: int = P.character_level("soldier")
+	var dup := 0
+	for i in 200:
+		P.add_orbs(GameCatalog.GACHA_SINGLE_COST)
+		var one: Dictionary = P.draw_gacha(1)[0]
+		if one["id"] == "soldier":
+			dup += 1
+			if dup == 1:
+				_check(P.character_level("soldier") == lv_before + 1, "duplicate levels up")
+			elif dup == 2:
+				_check(one["coins"] == GameCatalog.DUPLICATE_OVERFLOW_COINS, "max level duplicate turns into coins")
+				break
+	_check(dup >= 2, "drew soldier twice in 200 pulls")
+
+
+func test_deck_rules_and_level_bonus_in_battle() -> void:
+	_check(not P.set_deck(["soldier", "soldier", "shield"] as Array[String]), "no duplicates in deck")
+	_check(not P.set_deck(["soldier", "mage", "shield"] as Array[String]), "unowned character refused")
+	_check(not P.set_deck(["soldier", "shield"] as Array[String]), "deck needs 3")
+	P.characters["mage"] = 1
+	P.characters["soldier"] = 5
+	_check(P.set_deck(["mage", "soldier", "shield"] as Array[String]), "valid deck saved")
+	var b := await _start_battle()
+	_check(b.summoner.roster[0] == MAGE, "battle uses the deck")
+	_check(b.battle_ui.summon_buttons[0].name_label.text == MAGE.display_name, "summon buttons follow the deck")
+	var unit: UnitBase = b.summoner.summon(SOLDIER, Vector2(195, 600))
+	var bonus := GameCatalog.level_bonus(5)
+	_check(unit.max_hp == roundi(SOLDIER.max_hp * bonus) and unit.attack_power == roundi(SOLDIER.attack * bonus),
+			"Lv5 soldier gets +32%% (hp %d atk %d)" % [unit.max_hp, unit.attack_power])
+	b.wallet.coins = 1000
+	b.request_upgrade(UP_ATTACK)
+	_check(unit.attack_power == roundi(SOLDIER.attack * 1.15 * bonus), "battle upgrades stack with level bonus")
+
+
+func test_deck_screen_by_touch() -> void:
+	P.characters["knight"] = 2
+	change_scene_to_file("res://scenes/meta/deck.tscn")
+	await _frames(3)
+	var screen := current_scene
+	await _tap(screen.character_buttons["archer"].get_global_rect().get_center())
+	_check(P.deck.size() == 3 and screen.message_label.text.begins_with("あと1体"), "removing one asks for another")
+	var knight_button: Button = screen.character_buttons["knight"]
+	var scroll := knight_button.get_parent().get_parent() as ScrollContainer
+	scroll.ensure_control_visible(knight_button)
+	await _frames(2)
+	await _tap(knight_button.get_global_rect().get_center())
+	_check(P.deck.has("knight") and not P.deck.has("archer"), "knight replaces archer: %s" % [P.deck])
+	_check(screen.character_buttons["mage"].disabled, "unowned characters can't be chosen")
+	current_scene.queue_free()
+	await _frames(2)
+
+
+func test_permanent_upgrades() -> void:
+	var ups := GameCatalog.load_upgrades()
+	var atk: UpgradeData = ups[UP_ATTACK]
+	_check(P.permanent_next_cost(atk) == roundi(atk.base_cost * 5.0), "first permanent level costs base x5")
+	_check(not P.buy_permanent(atk), "refused without coins")
+	P.add_coins(100000)
+	for i in 10:
+		P.buy_permanent(atk)
+	_check(P.permanent_level("ally_attack") == GameCatalog.permanent_max_level(atk), "stops at the permanent max")
+	_check(P.permanent_next_cost(atk) == -1, "maxed")
+	P.buy_permanent(ups[UP_BASE])
+	var b := await _start_battle()
+	_check(b.upgrades.get_level(UP_ATTACK) == GameCatalog.permanent_max_level(atk), "battle starts at the permanent level")
+	_check(is_equal_approx(b.summoner.ally_attack_multiplier, 1.0 + atk.value_per_level * GameCatalog.permanent_max_level(atk)),
+			"its effect is active")
+	_check(b.base.max_hp == 1200 and b.base.hp == 1200, "base durability starts higher")
+	_check(b.upgrades.get_next_cost(UP_ATTACK) > atk.base_cost, "further in-battle levels cost more")
+
+
+func test_shop_test_purchases() -> void:
+	var service := PurchaseService.new()
+	_check(service.is_test_mode(), "shop is in test mode")
+	var results := []
+	service.purchase_finished.connect(func(_id: String, ok: bool, _m: String) -> void: results.append(ok))
+	service.buy("orbs_300")
+	_check(results == [true] and P.orbs_paid == 300 and P.orbs_free == 0, "purchase grants paid orbs")
+	_check(not P.grant_purchase("orbs_300", P.granted_transactions[0]), "same transaction is never granted twice")
+	_check(not P.grant_purchase("orbs_999", "t-x"), "unknown product refused")
+	_check(P.orbs_paid == 300, "no extra orbs")
+
+
+func test_mage_splash_and_spear_reach() -> void:
+	var b := await _start_battle()
+	var a := _enemy(Vector2(195, 300))
+	var c := _enemy(Vector2(215, 300))
+	var far := _enemy(Vector2(340, 300))
+	for e in [a, c, far]:
+		e.data = GRUNT.duplicate()
+		e.data.move_speed = 0.0
+		e._attack_cooldown = 1000.0
+	var proj := (load(Combatant.PROJECTILE_SCENE_PATH) as PackedScene).instantiate() as Projectile
+	b.effects.add_child(proj)
+	proj.launch(Vector2(195, 500), a, 30, 400.0, null)
+	proj.splash_radius = MAGE.splash_radius
+	proj.splash_group = &"enemies"
+	await _seconds(1.0)
+	_check(a.hp < a.max_hp and c.hp < c.max_hp, "splash hits the target and its neighbour")
+	_check(far.hp == far.max_hp, "splash does not reach far enemies")
+	var spear := _ally(Vector2(100, 450), SPEARMAN)
+	var t := _enemy(Vector2(100, 450 - 28 - 18))
+	t.data = GRUNT.duplicate()
+	t.data.move_speed = 0.0
+	await _seconds(1.5)
+	_check(t.hp < t.max_hp and spear.position.distance_to(t.position) > 40.0, "spear hits from further away")
+
+
+func test_healer_heals_allies_and_never_attacks() -> void:
+	var b := await _start_battle()
+	# Only healers on the field, so any damage to the enemy would have to come from them.
+	var hurt := _ally(Vector2(195, b.layout.archer_home_y), HEALER)
+	var healer := _ally(Vector2(230, b.layout.archer_home_y), HEALER)
+	var enemy := _enemy(Vector2(230, b.layout.archer_home_y - 60.0))
+	enemy.data = GRUNT.duplicate()
+	enemy.data.move_speed = 0.0
+	enemy._attack_cooldown = 1000.0
+	await _seconds(0.5)
+	hurt.take_damage(40)
+	var hp := hurt.hp
+	var targeted_enemy := false
+	for i in 180:
+		await physics_frame
+		targeted_enemy = targeted_enemy or (healer.target != null and healer.target.team == Combatant.Team.ENEMY)
+	_check(hurt.hp > hp, "healer restores HP (%d -> %d)" % [hp, hurt.hp])
+	_check(hurt.hp <= hurt.max_hp, "never above max")
+	_check(enemy.hp == enemy.max_hp, "healer does not attack enemies")
+	_check(not targeted_enemy, "healer never targets an enemy")
+	_check(b.summoner.summon(SOLDIER) != null, "setup sanity")
 
 
 func test_victory_beats_defeat_in_same_frame() -> void:

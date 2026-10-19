@@ -1,0 +1,28 @@
+[gd_resource type="Resource" script_class="UnitData" load_steps=2 format=3]
+
+[ext_resource type="Script" path="res://scripts/data/unit_data.gd" id="1_data"]
+
+[resource]
+script = ExtResource("1_data")
+id = &"healer"
+display_name = "ヒーラー"
+description = "近くで一番傷ついた味方を回復する。攻撃はしない。"
+max_hp = 60
+attack = 18
+defense = 0
+attack_interval = 1.5
+move_speed = 32.0
+attack_range = 120.0
+aggro_range = 150.0
+attack_type = 2
+projectile_speed = 220.0
+splash_radius = 0.0
+role = 2
+summon_cost = 40
+reward = 0
+placeholder_pattern = &"healer"
+body_color = Color(0.92, 0.92, 0.88, 1)
+accent_color = Color(0.3, 0.8, 0.4, 1)
+pixel_scale = 3
+body_radius = 14.0
+is_boss = false

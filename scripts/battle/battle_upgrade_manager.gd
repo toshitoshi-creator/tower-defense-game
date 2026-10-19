@@ -33,6 +33,16 @@ func setup(wallet: CoinWallet, summoner: SummonManager, base: BaseController) ->
 	_levels.fill(0)
 
 
+## Permanent upgrades: the battle begins with these levels already applied (free).
+## `levels` maps upgrade id -> level.
+func apply_starting_levels(levels: Dictionary) -> void:
+	for i in upgrades.size():
+		var target := mini(int(levels.get(str(upgrades[i].id), 0)), upgrades[i].max_level)
+		while _levels[i] < target:
+			_levels[i] += 1
+			_apply(i)
+
+
 func start() -> void:
 	active = true
 

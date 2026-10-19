@@ -1,0 +1,27 @@
+[gd_resource type="Resource" script_class="StageData" load_steps=8 format=3]
+
+[ext_resource type="Script" path="res://scripts/data/stage_data.gd" id="1_stage"]
+[ext_resource type="Script" path="res://scripts/data/boss_spawn.gd" id="2_boss"]
+[ext_resource type="Resource" path="res://resources/bosses/boss_1min.tres" id="3_b1"]
+[ext_resource type="Resource" path="res://resources/bosses/boss_2min.tres" id="4_b2"]
+[ext_resource type="Resource" path="res://resources/bosses/boss_3min.tres" id="5_b3"]
+[ext_resource type="Resource" path="res://resources/bosses/boss_4min.tres" id="6_b4"]
+[ext_resource type="Resource" path="res://resources/bosses/boss_final.tres" id="7_bf"]
+
+[resource]
+script = ExtResource("1_stage")
+id = "stage_1"
+display_name = "ステージ1 草原の砦"
+description = "ゴブリンの群れと魔王が攻めてくる。"
+enemy_stat_multiplier = 1.0
+start_interval = 3.5
+min_interval = 1.3
+interval_reduction_per_minute = 0.35
+stat_growth_per_minute = 0.12
+strong_chance_per_minute = 0.06
+strong_max_chance = 0.2
+max_wave_size = 2
+boss_schedule = Array[ExtResource("2_boss")]([ExtResource("3_b1"), ExtResource("4_b2"), ExtResource("5_b3"), ExtResource("6_b4"), ExtResource("7_bf")])
+clear_exp = 120
+roulette_coin_multiplier = 1.0
+ground_tint = Color(1, 1, 1, 1)

@@ -13,6 +13,10 @@ signal battle_ended(result: Result)
 enum Result { VICTORY, DEFEAT }
 enum Phase { READY, RUNNING, RESOLVING, ENDED }
 
+var stage: StageData
+## Victory rewards already granted to the player (empty on defeat).
+var clear_rewards: Dictionary = {}
+var roulette_segment: int = -1
 var phase: Phase = Phase.READY
 var result: Result = Result.DEFEAT
 var layout := BattleLayout.new()
@@ -27,6 +31,7 @@ var active_bosses: Array[EnemyBase] = []
 ## How often summon buttons are refreshed (cooldown shade, affordability).
 const UI_REFRESH_INTERVAL := 0.1
 const TITLE_SCENE := "res://scenes/title/title.tscn"
+const STAGE_SELECT_SCENE := "res://scenes/meta/stage_select.tscn"
 
 ## Pause between the deciding moment and the result panel, so the final explosion
 ## (or the base falling) is visible. Battle logic is already frozen during it.
@@ -52,9 +57,16 @@ var _shake_tween: Tween
 
 func _ready() -> void:
 	get_tree().paused = false
+	stage = PlayerData.current.current_stage()
+	spawner.apply_stage(stage)
 	spawner.setup(clock, layout, units, effects, base)
+	summoner.roster = PlayerData.current.deck_units()
+	summoner.unit_level_bonus = PlayerData.current.level_bonuses()
 	summoner.setup(wallet, layout, units, effects)
 	upgrades.setup(wallet, summoner, base)
+	upgrades.apply_starting_levels(PlayerData.current.permanent)
+	background.modulate = stage.ground_tint
+	battle_ui.set_stage_name("STAGE %d" % (GameCatalog.stage_ids().find(stage.id) + 1))
 	battle_ui.setup_summon_buttons(summoner.roster)
 	battle_ui.setup_upgrade_buttons(upgrades.upgrades)
 
@@ -76,6 +88,7 @@ func _ready() -> void:
 	battle_ui.layout_changed.connect(_update_layout)
 	result_ui.retry_requested.connect(retry)
 	result_ui.title_requested.connect(go_to_title)
+	result_ui.stage_select_requested.connect(go_to_stage_select)
 	battle_ui.title_requested.connect(go_to_title)
 	get_viewport().size_changed.connect(_update_layout)
 
@@ -178,6 +191,10 @@ func _resolve_end() -> void:
 	phase = Phase.ENDED
 	result = Result.VICTORY if _pending_results.has(Result.VICTORY) else Result.DEFEAT
 	_pending_results.clear()
+	if result == Result.VICTORY:
+		# Decided and saved now; the roulette on the result screen only shows it.
+		roulette_segment = PlayerData.current.spin_roulette()
+		clear_rewards = PlayerData.current.grant_clear_rewards(stage, roulette_segment)
 	_freeze_field()
 	battle_ui.set_upgrade_panel_open(false)
 	battle_ui.set_time(clock.elapsed)
@@ -199,7 +216,7 @@ func _show_result() -> void:
 		"mid_bosses_defeated": mid_bosses_defeated,
 		"mid_bosses_total": _count_scheduled_bosses(false),
 		"final_boss_defeated": final_boss_defeated,
-	})
+	}, stage, roulette_segment, clear_rewards)
 
 
 ## Stops every unit and projectile, but lets death fades, popups and flashes finish
@@ -272,6 +289,11 @@ func retry() -> void:
 	get_tree().paused = false
 	# Deferred: this runs from a button press, which must finish before its scene goes.
 	get_tree().reload_current_scene.call_deferred()
+
+
+func go_to_stage_select() -> void:
+	get_tree().paused = false
+	get_tree().change_scene_to_file.call_deferred(STAGE_SELECT_SCENE)
 
 
 func go_to_title() -> void:

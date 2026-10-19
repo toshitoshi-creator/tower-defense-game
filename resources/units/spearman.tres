@@ -1,0 +1,28 @@
+[gd_resource type="Resource" script_class="UnitData" load_steps=2 format=3]
+
+[ext_resource type="Script" path="res://scripts/data/unit_data.gd" id="1_data"]
+
+[resource]
+script = ExtResource("1_data")
+id = &"spearman"
+display_name = "槍兵"
+description = "長い槍で少し離れた敵を突く。"
+max_hp = 110
+attack = 18
+defense = 0
+attack_interval = 1.2
+move_speed = 38.0
+attack_range = 22.0
+aggro_range = 120.0
+attack_type = 0
+projectile_speed = 220.0
+splash_radius = 0.0
+role = 0
+summon_cost = 30
+reward = 0
+placeholder_pattern = &"spearman"
+body_color = Color(0.2, 0.55, 0.6, 1)
+accent_color = Color(0.85, 0.85, 0.9, 1)
+pixel_scale = 3
+body_radius = 14.0
+is_boss = false

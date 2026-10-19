@@ -11,6 +11,9 @@ var damage: int = 0
 var speed: float = 260.0
 var target: Combatant
 var source: Node
+## >0: also damages every member of splash_group within this radius of the impact.
+var splash_radius: float = 0.0
+var splash_group: StringName = &""
 
 var _aim_point: Vector2
 var _lifetime: float = 0.0
@@ -54,11 +57,27 @@ func _arrive() -> void:
 	_done = true
 	if _target_alive() and _lifetime < MAX_LIFETIME:
 		# The shooter may have died (and been freed) while the arrow was in flight.
-		target.take_damage(damage, source if is_instance_valid(source) else null)
+		var shooter: Node = source if is_instance_valid(source) else null
+		target.take_damage(damage, shooter)
+		if splash_radius > 0.0:
+			_splash(shooter)
 	queue_free()
 
 
+func _splash(shooter: Node) -> void:
+	PixelBurst.spawn(get_parent(), global_position, Color(0.75, 0.5, 1.0), 10, 90.0, 3.0, 0.3)
+	for node in get_tree().get_nodes_in_group(splash_group):
+		var other := node as Combatant
+		if other != null and other != target and other.is_alive() \
+				and other.global_position.distance_to(global_position) <= splash_radius + other.data.body_radius:
+			other.take_damage(damage, shooter)
+
+
 func _draw() -> void:
+	if splash_radius > 0.0:  # Magic bolt.
+		draw_rect(Rect2(-4, -4, 8, 8), Color(0.45, 0.2, 0.8))
+		draw_rect(Rect2(-2, -2, 4, 4), Color(0.95, 0.85, 1.0))
+		return
 	draw_line(Vector2(-LENGTH, 0), Vector2(0, 0), Color(0.55, 0.36, 0.18), 2.0)
 	draw_rect(Rect2(-LENGTH - 1, -2, 3, 4), Color(0.92, 0.92, 0.92))
 	draw_rect(Rect2(0, -1.5, 3, 3), Color(0.86, 0.9, 0.95))

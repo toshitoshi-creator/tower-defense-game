@@ -36,6 +36,8 @@ const ENEMY_SCENE := preload("res://scenes/units/enemy_unit.tscn")
 ## Hard cap on simultaneously alive enemies (performance guard).
 @export var max_alive: int = 60
 
+## Stage difficulty applied to every enemy and boss (see apply_stage).
+var enemy_stat_multiplier: float = 1.0
 var active: bool = false
 
 var _clock: BattleClock
@@ -74,8 +76,21 @@ func current_wave_size() -> int:
 	return mini(max_wave_size, 1 + floori(_clock.elapsed / extra_enemy_every))
 
 
+## Copies a stage's enemy settings. Call before start().
+func apply_stage(stage: StageData) -> void:
+	enemy_stat_multiplier = stage.enemy_stat_multiplier
+	start_interval = stage.start_interval
+	min_interval = stage.min_interval
+	interval_reduction_per_minute = stage.interval_reduction_per_minute
+	stat_growth_per_minute = stage.stat_growth_per_minute
+	strong_chance_per_minute = stage.strong_chance_per_minute
+	strong_max_chance = stage.strong_max_chance
+	max_wave_size = stage.max_wave_size
+	boss_schedule = stage.boss_schedule.duplicate()
+
+
 func current_stat_multiplier() -> float:
-	return 1.0 + stat_growth_per_minute * (_clock.elapsed / 60.0)
+	return enemy_stat_multiplier * (1.0 + stat_growth_per_minute * (_clock.elapsed / 60.0))
 
 
 func current_strong_chance() -> float:
@@ -117,7 +132,7 @@ func _spawn_due_bosses() -> void:
 		var spawn := boss_schedule[_next_boss]
 		_next_boss += 1
 		var at := Vector2((_layout.left + _layout.right) * 0.5, _layout.spawn_y + spawn.unit_data.body_radius)
-		var boss := spawn_enemy(spawn.unit_data, spawn.stat_multiplier, at, true)
+		var boss := spawn_enemy(spawn.unit_data, spawn.stat_multiplier * enemy_stat_multiplier, at, true)
 		if boss != null:
 			boss_spawned.emit(boss, spawn)
 

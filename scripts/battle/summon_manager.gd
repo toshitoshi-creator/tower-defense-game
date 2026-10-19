@@ -35,6 +35,8 @@ var count_per_summon: int = 1
 ## Ally stat upgrades. Use set_ally_multipliers() so living allies update too.
 var ally_hp_multiplier: float = 1.0
 var ally_attack_multiplier: float = 1.0
+## Character level bonus per unit id (from the player's collection), e.g. {&"soldier": 1.16}.
+var unit_level_bonus: Dictionary = {}
 
 var _wallet: CoinWallet
 var _layout: BattleLayout
@@ -143,7 +145,8 @@ func summon(unit_data: UnitData, at: Vector2 = Vector2.INF) -> UnitBase:
 	if at == Vector2.INF:
 		at = Vector2(randf_range(_layout.left + 30.0, _layout.right - 30.0), _layout.ally_spawn_y)
 	unit.position = at
-	unit.setup_ally(unit_data, _layout, _effects, ally_hp_multiplier, ally_attack_multiplier)
+	unit.setup_ally(unit_data, _layout, _effects, ally_hp_multiplier, ally_attack_multiplier,
+			unit_level_bonus.get(unit_data.id, 1.0))
 	_units_parent.add_child(unit)
 	unit_summoned.emit(unit)
 	return unit
