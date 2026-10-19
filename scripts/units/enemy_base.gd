@@ -12,6 +12,8 @@ func setup_enemy(unit_data: UnitData, battle_layout: BattleLayout, effects_layer
 		base: BaseController, stat_multiplier: float = 1.0) -> void:
 	_base = base
 	setup(unit_data, Team.ENEMY, battle_layout, effects_layer, stat_multiplier, stat_multiplier)
+	if unit_data.is_boss:
+		z_index = 1  # Draw above the crowd so the boss is always readable.
 
 
 func is_at_base() -> bool:

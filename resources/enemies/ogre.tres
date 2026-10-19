@@ -1,0 +1,25 @@
+[gd_resource type="Resource" script_class="UnitData" load_steps=2 format=3]
+
+[ext_resource type="Script" path="res://scripts/data/unit_data.gd" id="1_data"]
+
+[resource]
+script = ExtResource("1_data")
+id = &"ogre"
+display_name = "オーガ"
+description = "中ボス。巨体で味方をなぎ倒す。"
+max_hp = 900
+attack = 30
+defense = 3
+attack_interval = 1.5
+move_speed = 16.0
+attack_range = 6.0
+aggro_range = 120.0
+attack_type = 0
+reward = 100
+placeholder_pattern = &"ogre"
+body_color = Color(0.55, 0.42, 0.62, 1)
+accent_color = Color(0.42, 0.3, 0.16, 1)
+pixel_scale = 4
+body_radius = 26.0
+abilities = Array[StringName]([])
+is_boss = true

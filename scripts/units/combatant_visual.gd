@@ -28,7 +28,11 @@ func setup(data: UnitData, is_enemy: bool) -> void:
 	add_child(_body)
 	_hp_bar = _HpBar.new()
 	_hp_bar.fill_color = Color(0.95, 0.3, 0.25) if is_enemy else Color(0.35, 0.9, 0.4)
-	_hp_bar.position = Vector2(-HP_BAR_WIDTH * 0.5, -data.body_radius - 10.0)
+	# Bigger units (bosses) get a wider bar placed above their sprite.
+	_hp_bar.width = maxf(HP_BAR_WIDTH, data.body_radius * 2.0)
+	var half_height := maxf(data.body_radius,
+			PixelArt.get_size(data.placeholder_pattern, maxi(1, data.pixel_scale)).y * 0.5)
+	_hp_bar.position = Vector2(-_hp_bar.width * 0.5, -half_height - 6.0)
 	add_child(_hp_bar)
 
 
@@ -102,9 +106,10 @@ class _PixelBody extends Node2D:
 class _HpBar extends Node2D:
 	var ratio: float = 1.0
 	var fill_color: Color = Color.GREEN
+	var width: float = CombatantVisual.HP_BAR_WIDTH
 
 	func _draw() -> void:
-		var w := CombatantVisual.HP_BAR_WIDTH
+		var w := width
 		var h := CombatantVisual.HP_BAR_HEIGHT
 		draw_rect(Rect2(-1, -1, w + 2, h + 2), Color(0.05, 0.05, 0.05))
 		draw_rect(Rect2(0, 0, w * ratio, h), fill_color)

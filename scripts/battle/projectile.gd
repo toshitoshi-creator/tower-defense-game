@@ -49,7 +49,8 @@ func _target_alive() -> bool:
 func _arrive() -> void:
 	_done = true
 	if _target_alive() and _lifetime < MAX_LIFETIME:
-		target.take_damage(damage, source)
+		# The shooter may have died (and been freed) while the arrow was in flight.
+		target.take_damage(damage, source if is_instance_valid(source) else null)
 	queue_free()
 
 

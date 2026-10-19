@@ -16,6 +16,8 @@ const RETARGET_INTERVAL := 0.2
 ## Loaded lazily (not preloaded): projectile.gd references Combatant, and a preload
 ## here would make the two scripts load each other.
 const PROJECTILE_SCENE_PATH := "res://scenes/battle/projectile.tscn"
+## "cleave" ability: a melee hit also strikes opponents this close to the target.
+const CLEAVE_RADIUS := 40.0
 
 var data: UnitData
 var team: Team = Team.ALLY
@@ -127,7 +129,8 @@ func _find_nearest_opponent() -> Combatant:
 		var other := node as Combatant
 		if other == null or not other.is_alive():
 			continue
-		var dist := global_position.distance_to(other.global_position)
+		# Edge distance, so large units (bosses) aren't ignored for small ones nearby.
+		var dist := global_position.distance_to(other.global_position) - other.data.body_radius
 		if dist <= best_dist:
 			best_dist = dist
 			best = other
@@ -154,9 +157,21 @@ func _attack(other: Combatant) -> void:
 	_visual.play_attack((other.global_position - global_position).normalized())
 	match data.attack_type:
 		UnitData.AttackType.MELEE:
-			other.take_damage(attack_power, self)
+			if data.abilities.has(&"cleave"):
+				_cleave(other)
+			else:
+				other.take_damage(attack_power, self)
 		UnitData.AttackType.RANGED:
 			_fire_projectile(other)
+
+
+func _cleave(primary: Combatant) -> void:
+	var center := primary.global_position
+	for node in get_tree().get_nodes_in_group(get_opponent_group()):
+		var other := node as Combatant
+		if other != null and other.is_alive() \
+				and other.global_position.distance_to(center) <= CLEAVE_RADIUS + other.data.body_radius:
+			other.take_damage(attack_power, self)
 
 
 func _fire_projectile(other: Combatant) -> void:

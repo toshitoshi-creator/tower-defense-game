@@ -18,6 +18,11 @@ var result: Result = Result.DEFEAT
 var layout := BattleLayout.new()
 var kills: int = 0
 var bosses_defeated: int = 0
+var mid_bosses_defeated: int = 0
+var final_boss_defeated: bool = false
+var bosses_spawned: int = 0
+## Living bosses, oldest first. The HUD bar tracks the final boss if present, else the oldest.
+var active_bosses: Array[EnemyBase] = []
 
 ## How often summon buttons are refreshed (cooldown shade, affordability).
 const UI_REFRESH_INTERVAL := 0.1
@@ -48,6 +53,7 @@ func _ready() -> void:
 	battle_ui.setup_upgrade_buttons(upgrades.upgrades)
 
 	spawner.enemy_spawned.connect(_on_enemy_spawned)
+	spawner.boss_spawned.connect(_on_boss_spawned)
 	base.destroyed.connect(_on_base_destroyed)
 	base.hp_changed.connect(battle_ui.set_base_hp)
 	base.damaged.connect(_on_base_damaged)
@@ -58,7 +64,7 @@ func _ready() -> void:
 	battle_ui.upgrade_pressed.connect(request_upgrade)
 	upgrades.upgraded.connect(_on_upgraded)
 	upgrades.upgrade_rejected.connect(_on_upgrade_rejected)
-	clock.second_elapsed.connect(func(_s: int) -> void: battle_ui.set_time(clock.elapsed))
+	clock.second_elapsed.connect(_on_second_elapsed)
 	battle_ui.pause_requested.connect(set_paused.bind(true))
 	battle_ui.resume_requested.connect(set_paused.bind(false))
 	battle_ui.layout_changed.connect(_update_layout)
@@ -67,6 +73,7 @@ func _ready() -> void:
 
 	battle_ui.set_base_hp(base.hp, base.max_hp)
 	battle_ui.set_coins(wallet.coins)
+	_refresh_boss_countdown()
 	_update_layout()
 	start_battle()
 
@@ -88,10 +95,51 @@ func is_running() -> bool:
 	return phase == Phase.RUNNING
 
 
-## Hook for phase 4: called when the final boss dies.
+## Requests victory. Called when the final boss dies (also accepted during the
+## frame the base falls, so a simultaneous kill still wins).
 func notify_final_boss_defeated() -> void:
-	bosses_defeated += 1
 	_request_end(Result.VICTORY)
+
+
+func _on_second_elapsed(_seconds: int) -> void:
+	battle_ui.set_time(clock.elapsed)
+	if active_bosses.is_empty():
+		_refresh_boss_countdown()
+
+
+func _on_boss_spawned(boss: EnemyBase, spawn: BossSpawn) -> void:
+	bosses_spawned += 1
+	active_bosses.append(boss)
+	boss.damaged.connect(func(_c: Combatant, _a: int) -> void: _refresh_boss_bar())
+	boss.defeated.connect(_on_boss_defeated.bind(spawn))
+	battle_ui.show_banner(spawn.announce_text,
+			Color(1.0, 0.8, 0.25) if spawn.is_final else Color(1.0, 0.4, 0.35))
+	_refresh_boss_bar()
+
+
+func _on_boss_defeated(boss: EnemyBase, _reward: int, spawn: BossSpawn) -> void:
+	active_bosses.erase(boss)
+	_refresh_boss_bar()
+	if phase != Phase.RUNNING and phase != Phase.RESOLVING:
+		return
+	bosses_defeated += 1
+	if spawn.is_final:
+		final_boss_defeated = true
+		notify_final_boss_defeated()
+	else:
+		mid_bosses_defeated += 1
+		battle_ui.show_banner("中ボス撃破！", Color(0.6, 1.0, 0.6))
+
+
+func _refresh_boss_bar() -> void:
+	var shown: EnemyBase = null
+	for boss in active_bosses:
+		if is_instance_valid(boss) and boss.is_alive() and (shown == null or boss.data.max_hp > shown.data.max_hp):
+			shown = boss
+	if shown == null:
+		_refresh_boss_countdown()
+	else:
+		battle_ui.show_boss_bar(shown.data.display_name, float(shown.hp) / float(shown.max_hp))
 
 
 func _on_base_destroyed() -> void:
@@ -128,8 +176,28 @@ func _resolve_end() -> void:
 		"kills": kills,
 		"coins_earned": wallet.total_earned,
 		"bosses_defeated": bosses_defeated,
+		"mid_bosses_defeated": mid_bosses_defeated,
+		"mid_bosses_total": _count_scheduled_bosses(false),
+		"final_boss_defeated": final_boss_defeated,
 	})
 	battle_ended.emit(result)
+
+
+func _refresh_boss_countdown() -> void:
+	var next := spawner.get_next_boss()
+	if next == null:
+		battle_ui.show_boss_countdown("")
+		return
+	battle_ui.show_boss_countdown("%sまで %s" % ["最終ボス" if next.is_final else "中ボス",
+			BattleClock.format_time(ceilf(spawner.time_to_next_boss()))])
+
+
+func _count_scheduled_bosses(final: bool) -> int:
+	var n := 0
+	for spawn in spawner.boss_schedule:
+		if spawn.is_final == final:
+			n += 1
+	return n
 
 
 ## Entry point for summon taps (UI) — the summon manager validates everything.

@@ -28,5 +28,6 @@ func show_result(victory: bool, stats: Dictionary) -> void:
 	time_label.text = "戦闘時間  %s" % BattleClock.format_time(stats.get("time", 0.0))
 	kills_label.text = "撃破数  %d" % stats.get("kills", 0)
 	coins_label.text = "獲得コイン  %d" % stats.get("coins_earned", 0)
-	boss_label.text = "ボス撃破  %d" % stats.get("bosses_defeated", 0)
+	boss_label.text = "中ボス撃破  %d / %d\n最終ボス  %s" % [stats.get("mid_bosses_defeated", 0),
+			stats.get("mid_bosses_total", 0), "撃破" if stats.get("final_boss_defeated", false) else "未撃破"]
 	panel.visible = true

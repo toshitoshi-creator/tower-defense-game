@@ -15,14 +15,17 @@ signal layout_changed
 @onready var root: Control = $Root
 @onready var top_bar: Control = $Root/TopBar
 @onready var bottom_panel: Control = $Root/BottomPanel
-@onready var time_label: Label = $Root/TopBar/Row/TimeLabel
-@onready var coin_label: Label = $Root/TopBar/Row/CoinLabel
-@onready var kills_label: Label = $Root/TopBar/Row/KillsLabel
-@onready var pause_button: Button = $Root/TopBar/Row/PauseButton
+@onready var time_label: Label = $Root/TopBar/Stack/Row/TimeLabel
+@onready var coin_label: Label = $Root/TopBar/Stack/Row/CoinLabel
+@onready var kills_label: Label = $Root/TopBar/Stack/Row/KillsLabel
+@onready var pause_button: Button = $Root/TopBar/Stack/Row/PauseButton
 @onready var base_hp_bar: ProgressBar = $Root/BottomPanel/Column/BaseRow/BaseHpBar
 @onready var base_hp_label: Label = $Root/BottomPanel/Column/BaseRow/BaseHpBar/BaseHpLabel
 @onready var summon_row: HBoxContainer = $Root/BottomPanel/Column/SummonRow
 @onready var toast: Label = $Root/Toast
+@onready var boss_name_label: Label = $Root/TopBar/Stack/BossRow/BossNameLabel
+@onready var boss_hp_bar: ProgressBar = $Root/TopBar/Stack/BossRow/BossHpBar
+@onready var banner: Label = $Root/Banner
 @onready var upgrade_toggle: Button = $Root/BottomPanel/Column/BaseRow/UpgradeToggle
 @onready var upgrade_panel: Control = $Root/UpgradePanel
 @onready var upgrade_grid: GridContainer = $Root/UpgradePanel/Grid
@@ -38,6 +41,7 @@ var upgrade_buttons: Array[UpgradeButton] = []
 
 var _flash_tween: Tween
 var _toast_tween: Tween
+var _banner_tween: Tween
 
 
 func _ready() -> void:
@@ -54,6 +58,7 @@ func _ready() -> void:
 	set_coins(0)
 	show_pause_overlay(false)
 	set_upgrade_panel_open(false)
+	show_boss_countdown("")
 
 
 func get_field_top() -> float:
@@ -152,6 +157,41 @@ func show_toast(message: String) -> void:
 	_toast_tween.tween_interval(0.9)
 	_toast_tween.tween_property(toast, "modulate:a", 0.0, 0.3)
 	_toast_tween.tween_callback(toast.hide)
+
+
+## The boss row lives inside the top bar (it never covers the field) and is always
+## present, so the layout doesn't shift when a boss appears.
+## Shows a living boss's HP. `ratio` is current/max HP.
+func show_boss_bar(boss_name: String, ratio: float) -> void:
+	boss_name_label.text = boss_name
+	boss_hp_bar.value = clampf(ratio, 0.0, 1.0)
+	boss_hp_bar.modulate.a = 1.0
+
+
+## No boss alive: shows the time to the next boss instead (empty text = nothing).
+func show_boss_countdown(text_value: String) -> void:
+	boss_name_label.text = text_value
+	boss_hp_bar.modulate.a = 0.0
+
+
+func is_boss_bar_shown() -> bool:
+	return boss_hp_bar.modulate.a > 0.0
+
+
+func show_banner(text_value: String, color: Color) -> void:
+	banner.text = text_value
+	banner.add_theme_color_override("font_color", color)
+	banner.visible = true
+	banner.modulate.a = 1.0
+	banner.pivot_offset = banner.size * 0.5
+	banner.scale = Vector2(1.6, 1.6)
+	if _banner_tween != null:
+		_banner_tween.kill()
+	_banner_tween = create_tween()
+	_banner_tween.tween_property(banner, "scale", Vector2.ONE, 0.25).set_trans(Tween.TRANS_BACK)
+	_banner_tween.tween_interval(1.6)
+	_banner_tween.tween_property(banner, "modulate:a", 0.0, 0.4)
+	_banner_tween.tween_callback(banner.hide)
 
 
 func set_kills(count: int) -> void:

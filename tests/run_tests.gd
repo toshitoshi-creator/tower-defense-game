@@ -9,6 +9,9 @@ const SOLDIER: UnitData = preload("res://resources/units/soldier.tres")
 const ARCHER: UnitData = preload("res://resources/units/archer.tres")
 const SHIELD: UnitData = preload("res://resources/units/shield.tres")
 const GRUNT: UnitData = preload("res://resources/enemies/grunt.tres")
+const BRUTE: UnitData = preload("res://resources/enemies/brute.tres")
+const OGRE: UnitData = preload("res://resources/enemies/ogre.tres")
+const DEMON_KING: UnitData = preload("res://resources/enemies/demon_king.tres")
 const SLOT_SOLDIER := 0
 const SLOT_ARCHER := 1
 const SLOT_SHIELD := 2
@@ -414,6 +417,20 @@ func test_arrow_in_flight_when_target_dies_does_nothing() -> void:
 	_check(b.kills == 1, "kill counted once")
 
 
+func test_arrow_still_hits_after_shooter_is_freed() -> void:
+	var b := await _start_battle()
+	var enemy := _enemy(Vector2(195, 200))
+	var shooter := _ally(Vector2(195, 600), ARCHER)
+	var proj := (load(Combatant.PROJECTILE_SCENE_PATH) as PackedScene).instantiate() as Projectile
+	b.effects.add_child(proj)
+	proj.launch(Vector2(195, 600), enemy, 20, 200.0, shooter)
+	shooter.free()
+	var hp_before := enemy.hp
+	await _seconds(2.5)
+	_check(not is_instance_valid(proj), "projectile cleaned up")
+	_check(enemy.hp == hp_before - 20, "arrow damage still applied (hp %d -> %d)" % [hp_before, enemy.hp])
+
+
 func test_shield_defense_reduces_damage() -> void:
 	await _start_battle()
 	var shield := _ally(Vector2(195, 400), SHIELD)
@@ -639,10 +656,9 @@ func test_upgrade_drawer_by_touch() -> void:
 	_check(not b.battle_ui.is_upgrade_panel_open(), "tap closes drawer")
 
 
-func test_upgrading_player_outlasts_and_buys_upgrades() -> void:
-	# Bot: always summons; at the unit cap or with coins piling up, buys the cheapest upgrade.
-	var b := await _start_battle(false)
-	var limit := 8.0 * 60.0
+## A reasonable player: keeps a mixed army (at most ~1/3 shields), always summons,
+## and buys the cheapest upgrade when at the unit cap or holding 150+ coins.
+func _play_balanced(b: BattleManager, limit: float) -> int:
 	var bought := 0
 	while b.phase != BattleManager.Phase.ENDED and b.clock.elapsed < limit:
 		if b.summoner.get_free_capacity() < 3 or b.wallet.coins >= 150:
@@ -653,14 +669,185 @@ func test_upgrading_player_outlasts_and_buys_upgrades() -> void:
 					best = i
 			if best >= 0 and b.request_upgrade(best) == BattleUpgradeManager.Reason.OK:
 				bought += 1
-		for slot in [SLOT_SHIELD, SLOT_SOLDIER, SLOT_ARCHER]:
+		var allies := _count(&"allies")
+		var shields := 0
+		for u in get_nodes_in_group(&"allies"):
+			if (u as UnitBase).data == SHIELD:
+				shields += 1
+		var order := [SLOT_SHIELD, SLOT_SOLDIER, SLOT_ARCHER] if shields * 4 < allies \
+				else [SLOT_SOLDIER, SLOT_ARCHER, SLOT_SHIELD]
+		for slot in order:
+			if slot == SLOT_SHIELD and shields * 3 > allies + 1:
+				continue
 			if b.summoner.check_summon(slot) == SummonManager.Reason.OK:
 				b.request_summon(slot)
 		await _seconds(0.5)
-	print("        upgrade bot: ended=%s at %s, kills=%d, upgrades bought=%d" % [
-			b.phase == BattleManager.Phase.ENDED, BattleClock.format_time(b.clock.elapsed), b.kills, bought])
+	return bought
+
+
+func test_full_battle_reaches_final_boss() -> void:
+	var b := await _start_battle(false)
+	var bought := await _play_balanced(b, 8.0 * 60.0)
+	print("        balanced bot: %s at %s, kills=%d, upgrades=%d, mid bosses %d/4, final %s" % [
+			["VICTORY", "DEFEAT"][b.result] if b.phase == BattleManager.Phase.ENDED else "running",
+			BattleClock.format_time(b.clock.elapsed), b.kills, bought, b.mid_bosses_defeated,
+			"defeated" if b.final_boss_defeated else "alive"])
 	_check(bought >= 5, "bot bought upgrades (%d)" % bought)
-	_check(b.clock.elapsed >= 240.0, "upgrading player lasts 4+ minutes (%.0fs)" % b.clock.elapsed)
+	_check(b.bosses_spawned == 5, "all 5 bosses appeared (%d)" % b.bosses_spawned)
+	_check(b.mid_bosses_defeated >= 3, "army handles mid bosses (%d)" % b.mid_bosses_defeated)
+	_check(b.phase == BattleManager.Phase.ENDED, "battle is decided")
+	_check((b.result == BattleManager.Result.VICTORY) == b.final_boss_defeated,
+			"victory iff final boss defeated")
+
+
+func test_regular_spawn_curve() -> void:
+	var b := await _start_battle()
+	var sp := b.spawner
+	b.clock.elapsed = 0.0
+	_check(is_equal_approx(sp.current_interval(), 3.0) and sp.current_wave_size() == 1, "start: 1 enemy / 3s")
+	_check(sp.current_strong_chance() == 0.0, "no strong enemies at start")
+	b.clock.elapsed = 89.0
+	_check(sp.current_strong_chance() == 0.0, "no strong enemies before 1:30")
+	b.clock.elapsed = 150.0
+	_check(sp.current_interval() < 3.0 and sp.current_wave_size() == 2, "faster, bigger waves later")
+	_check(sp.current_strong_chance() > 0.0, "strong enemies mixed in after 1:30")
+	_check(sp.current_stat_multiplier() > 1.3, "stats grow")
+	b.clock.elapsed = 600.0
+	_check(sp.current_interval() == sp.min_interval and sp.current_wave_size() == sp.max_wave_size, "curve capped")
+	_check(sp.current_strong_chance() == sp.strong_max_chance, "strong share capped")
+	_check(GRUNT.reward == 5 and BRUTE.reward == 12 and OGRE.reward == 100 and DEMON_KING.reward == 300, "spec rewards")
+
+
+func _boss_count(data: UnitData) -> int:
+	var n := 0
+	for e in get_nodes_in_group(&"enemies"):
+		if (e as EnemyBase).data == data:
+			n += 1
+	return n
+
+
+func test_mid_bosses_appear_on_schedule() -> void:
+	var b := await _start_battle()
+	for i in 4:
+		var t := 60.0 * (i + 1)
+		b.clock.elapsed = t - 0.3
+		await _frames(6)
+		_check(b.bosses_spawned == i, "no boss before %ds" % int(t))
+		await _frames(20)
+		_check(b.bosses_spawned == i + 1, "boss %d appears at %ds (t=%.2f)" % [i + 1, int(t), b.clock.elapsed])
+		_check(b.battle_ui.banner.visible and b.battle_ui.banner.text == "中ボス出現！", "mid boss banner")
+		_check(b.battle_ui.is_boss_bar_shown(), "boss HP bar shown")
+	_check(_boss_count(OGRE) == 4, "four ogres on the field")
+	var mults := []
+	for e in b.active_bosses:
+		mults.append(e.max_hp)
+	_check(mults == [900, 1170, 1440, 1710], "later mid bosses are tougher: %s" % [mults])
+	_check(_boss_count(DEMON_KING) == 0, "no final boss before 5:00")
+
+
+func test_boss_spawn_ignores_regular_spawning_and_cap() -> void:
+	var b := await _start_battle()
+	b.spawner.max_alive = 0
+	_check(b.spawner.spawn_enemy(GRUNT) == null, "regular enemies blocked by cap")
+	b.clock.elapsed = 250.0  # Four boss times already passed (e.g. after a long hitch).
+	await _frames(2)
+	_check(b.bosses_spawned == 4, "all overdue bosses spawn, despite cap and auto_spawn=false (%d)" % b.bosses_spawned)
+	await _frames(10)
+	_check(b.bosses_spawned == 4, "each boss spawns only once")
+
+
+func test_final_boss_at_five_minutes_and_time_alone_does_not_win() -> void:
+	var b := await _start_battle()
+	b.clock.elapsed = 299.7
+	await _frames(6)
+	_check(_boss_count(DEMON_KING) == 0, "not yet at 4:59.8")
+	await _frames(20)
+	_check(_boss_count(DEMON_KING) == 1, "final boss appears at 5:00")
+	_check(b.battle_ui.banner.text == "最終ボス出現！", "final boss banner")
+	_check(b.battle_ui.boss_name_label.text == DEMON_KING.display_name, "boss bar shows the final boss")
+	await _seconds(3.0)
+	_check(b.phase == BattleManager.Phase.RUNNING, "reaching 5:00 is not a victory")
+	_check(b.clock.elapsed > 300.0, "clock keeps running after 5:00")
+
+
+func test_mid_boss_kill_rewards_but_does_not_win() -> void:
+	var b := await _start_battle()
+	b.clock.elapsed = 60.0
+	await _frames(2)
+	var boss: EnemyBase = b.active_bosses[0]
+	var coins := b.wallet.coins
+	boss.take_damage(int(boss.max_hp * 0.5))
+	await _frames(1)
+	_check(is_equal_approx(b.battle_ui.boss_hp_bar.value, 0.5), "boss bar at half (%f)" % b.battle_ui.boss_hp_bar.value)
+	boss.take_damage(99999)
+	boss.take_damage(99999)
+	await _frames(2)
+	_check(b.wallet.coins - coins == 100, "mid boss pays 100 once (%d)" % (b.wallet.coins - coins))
+	_check(b.mid_bosses_defeated == 1 and b.bosses_defeated == 1, "counted once")
+	_check(b.phase == BattleManager.Phase.RUNNING, "mid boss kill is not a victory")
+	_check(not b.battle_ui.is_boss_bar_shown(), "boss HP bar hidden when no boss is alive")
+	await _seconds(1.1)
+	_check(b.battle_ui.boss_name_label.text.begins_with("中ボスまで"), "countdown to next boss: %s" % b.battle_ui.boss_name_label.text)
+	_check(b.battle_ui.banner.text == "中ボス撃破！", "mid boss defeat banner")
+
+
+func test_killing_final_boss_wins_and_stops_battle() -> void:
+	var b := await _start_battle()
+	b.spawner.auto_spawn = true
+	b.clock.elapsed = 300.0
+	await _frames(2)
+	var boss: EnemyBase
+	for e in b.active_bosses:
+		if e.data == DEMON_KING:
+			boss = e
+	_check(boss != null, "final boss present")
+	if boss == null:
+		return
+	var coins := b.wallet.coins
+	var ally := _ally(Vector2(60, 500))
+	boss.take_damage(99999, ally)
+	await _frames(2)
+	_check(b.phase == BattleManager.Phase.ENDED and b.result == BattleManager.Result.VICTORY, "victory")
+	_check(b.final_boss_defeated, "final boss recorded")
+	_check(b.wallet.coins - coins == 300, "final boss pays 300 (%d)" % (b.wallet.coins - coins))
+	_check(b.result_ui.shown_count == 1 and b.result_ui.title_label.text == "勝利！", "victory screen once")
+	_check(b.result_ui.boss_label.text.contains("最終ボス  撃破"), "result lists final boss defeated: %s" % b.result_ui.boss_label.text)
+	var enemies := _count(&"enemies")
+	var t := b.clock.elapsed
+	var c := b.wallet.coins
+	await _seconds(3.0)
+	_check(_count(&"enemies") == enemies and b.clock.elapsed == t and b.wallet.coins == c,
+			"spawning, clock and coins stop after victory")
+
+
+func test_final_boss_cleave_hits_clustered_allies() -> void:
+	var b := await _start_battle()
+	var boss := b.spawner.spawn_enemy(DEMON_KING, 1.0, Vector2(195, 300), true)
+	var group: Array[UnitBase] = []
+	for i in 3:
+		group.append(_ally(Vector2(185 + i * 10, 300 + DEMON_KING.body_radius + 12), SHIELD))
+	var far := _ally(Vector2(40, 300), SHIELD)
+	await _seconds(2.0)
+	var hurt := 0
+	for u in group:
+		if u.hp < u.max_hp:
+			hurt += 1
+	_check(hurt == 3, "cleave hits every clustered ally (%d/3)" % hurt)
+	_check(far.hp == far.max_hp or far.position.distance_to(boss.position) < 90.0, "allies far away are not hit")
+
+
+func test_allies_target_big_units_by_edge_distance() -> void:
+	var b := await _start_battle()
+	var boss := b.spawner.spawn_enemy(OGRE, 1.0, Vector2(195, 300), true)
+	boss.data = OGRE.duplicate()
+	boss.data.move_speed = 0.0
+	# From the ally: grunt center 50px (edge 36), ogre center 60px (edge 34).
+	var grunt := _enemy(Vector2(195 + 50, 360))
+	grunt.data = GRUNT.duplicate()
+	grunt.data.move_speed = 0.0
+	var ally := _ally(Vector2(195, 360))
+	await _frames(20)
+	_check(ally.target == boss, "ally attacks the ogre whose edge is closer")
 
 
 func test_victory_beats_defeat_in_same_frame() -> void:

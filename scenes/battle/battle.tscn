@@ -1,4 +1,4 @@
-[gd_scene load_steps=23 format=3]
+[gd_scene load_steps=31 format=3]
 
 [ext_resource type="Script" path="res://scripts/battle/battle_manager.gd" id="1_manager"]
 [ext_resource type="Script" path="res://scripts/battle/battle_clock.gd" id="2_clock"]
@@ -21,6 +21,13 @@
 [ext_resource type="Resource" path="res://resources/upgrades/ally_hp.tres" id="20_up"]
 [ext_resource type="Resource" path="res://resources/upgrades/base_hp.tres" id="21_up"]
 [ext_resource type="Resource" path="res://resources/upgrades/coin_gain.tres" id="22_up"]
+[ext_resource type="Resource" path="res://resources/enemies/brute.tres" id="23_brute"]
+[ext_resource type="Script" path="res://scripts/data/boss_spawn.gd" id="24_boss_spawn"]
+[ext_resource type="Resource" path="res://resources/bosses/boss_1min.tres" id="25_b1"]
+[ext_resource type="Resource" path="res://resources/bosses/boss_2min.tres" id="26_b2"]
+[ext_resource type="Resource" path="res://resources/bosses/boss_3min.tres" id="27_b3"]
+[ext_resource type="Resource" path="res://resources/bosses/boss_4min.tres" id="28_b4"]
+[ext_resource type="Resource" path="res://resources/bosses/boss_final.tres" id="29_bf"]
 [ext_resource type="PackedScene" path="res://scenes/ui/result_ui.tscn" id="10_result"]
 
 [node name="Battle" type="Node2D"]
@@ -48,6 +55,8 @@ y_sort_enabled = true
 [node name="EnemySpawner" type="Node" parent="."]
 script = ExtResource("5_spawner")
 grunt_data = ExtResource("7_grunt")
+strong_data = ExtResource("23_brute")
+boss_schedule = Array[ExtResource("24_boss_spawn")]([ExtResource("25_b1"), ExtResource("26_b2"), ExtResource("27_b3"), ExtResource("28_b4"), ExtResource("29_bf")])
 
 [node name="SummonManager" type="Node" parent="."]
 script = ExtResource("6_summon")
