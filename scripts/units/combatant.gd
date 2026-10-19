@@ -195,6 +195,8 @@ func take_damage(raw_attack: int, source: Node = null) -> int:
 	hp -= amount
 	_visual.set_hp_ratio(float(hp) / float(max_hp))
 	_visual.play_hurt()
+	PixelBurst.spawn(_effects_layer, global_position + Vector2(randf_range(-4, 4), -4),
+			Color(1.0, 0.9, 0.6), 4, 50.0, 2.0, 0.2)
 	FloatingText.spawn(_effects_layer, global_position + Vector2(0, -data.body_radius - 8), str(amount),
 			FloatingText.COLOR_DAMAGE_TO_ALLY if team == Team.ALLY else FloatingText.COLOR_DAMAGE_TO_ENEMY)
 	damaged.emit(self, amount)
@@ -213,6 +215,29 @@ func _die(killer: Node) -> void:
 	remove_from_group(GROUP_BY_TEAM[team])
 	set_physics_process(false)
 	died.emit(self, killer)
+	if data.is_boss:
+		PixelBurst.spawn(_effects_layer, global_position, data.accent_color, 20, 160.0, 5.0, 0.8)
+	PixelBurst.spawn(_effects_layer, global_position, data.body_color.lerp(Color.GRAY, 0.4),
+			8, 70.0, 3.0, 0.4)
+	_visual.play_death(queue_free)
+
+
+## Battle over: stop acting but keep animations/fades running.
+func freeze() -> void:
+	if state == State.DEAD:
+		return
+	set_physics_process(false)
+	target = null
+	_set_state(State.IDLE)
+
+
+## Leaves the field without counting as a kill (enemies routing after a victory).
+func vanish() -> void:
+	if state == State.DEAD:
+		return
+	_set_state(State.DEAD)
+	remove_from_group(GROUP_BY_TEAM[team])
+	set_physics_process(false)
 	_visual.play_death(queue_free)
 
 

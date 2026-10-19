@@ -26,9 +26,15 @@ var active_bosses: Array[EnemyBase] = []
 
 ## How often summon buttons are refreshed (cooldown shade, affordability).
 const UI_REFRESH_INTERVAL := 0.1
+const TITLE_SCENE := "res://scenes/title/title.tscn"
+
+## Pause between the deciding moment and the result panel, so the final explosion
+## (or the base falling) is visible. Battle logic is already frozen during it.
+@export var result_delay: float = 1.2
 
 var _pending_results: Array[Result] = []
 var _ui_refresh_timer: float = 0.0
+var _shake_tween: Tween
 
 @onready var clock: BattleClock = $BattleClock
 @onready var wallet: CoinWallet = $CoinWallet
@@ -69,6 +75,8 @@ func _ready() -> void:
 	battle_ui.resume_requested.connect(set_paused.bind(false))
 	battle_ui.layout_changed.connect(_update_layout)
 	result_ui.retry_requested.connect(retry)
+	result_ui.title_requested.connect(go_to_title)
+	battle_ui.title_requested.connect(go_to_title)
 	get_viewport().size_changed.connect(_update_layout)
 
 	battle_ui.set_base_hp(base.hp, base.max_hp)
@@ -88,6 +96,7 @@ func start_battle() -> void:
 	summoner.start()
 	upgrades.start()
 	_refresh_summon_ui()
+	battle_ui.show_banner("戦闘開始！", Color(1.0, 1.0, 0.9))
 	battle_started.emit()
 
 
@@ -110,6 +119,7 @@ func _on_second_elapsed(_seconds: int) -> void:
 func _on_boss_spawned(boss: EnemyBase, spawn: BossSpawn) -> void:
 	bosses_spawned += 1
 	active_bosses.append(boss)
+	shake(5.0 if spawn.is_final else 3.0, 0.4)
 	boss.damaged.connect(func(_c: Combatant, _a: int) -> void: _refresh_boss_bar())
 	boss.defeated.connect(_on_boss_defeated.bind(spawn))
 	battle_ui.show_banner(spawn.announce_text,
@@ -123,6 +133,7 @@ func _on_boss_defeated(boss: EnemyBase, _reward: int, spawn: BossSpawn) -> void:
 	if phase != Phase.RUNNING and phase != Phase.RESOLVING:
 		return
 	bosses_defeated += 1
+	shake(6.0, 0.5)
 	if spawn.is_final:
 		final_boss_defeated = true
 		notify_final_boss_defeated()
@@ -167,10 +178,19 @@ func _resolve_end() -> void:
 	phase = Phase.ENDED
 	result = Result.VICTORY if _pending_results.has(Result.VICTORY) else Result.DEFEAT
 	_pending_results.clear()
-	# Freeze every unit, attack and tween on the field.
-	world.process_mode = Node.PROCESS_MODE_DISABLED
+	_freeze_field()
 	battle_ui.set_upgrade_panel_open(false)
 	battle_ui.set_time(clock.elapsed)
+	battle_ui.show_banner("勝利！" if result == Result.VICTORY else "陣地陥落…",
+			Color(1.0, 0.85, 0.3) if result == Result.VICTORY else Color(1.0, 0.4, 0.35))
+	battle_ended.emit(result)
+	# A tween (not a SceneTree timer) so a pending delay dies with this node.
+	var delay := create_tween()
+	delay.tween_interval(result_delay)
+	delay.tween_callback(_show_result)
+
+
+func _show_result() -> void:
 	result_ui.show_result(result == Result.VICTORY, {
 		"time": clock.elapsed,
 		"kills": kills,
@@ -180,7 +200,39 @@ func _resolve_end() -> void:
 		"mid_bosses_total": _count_scheduled_bosses(false),
 		"final_boss_defeated": final_boss_defeated,
 	})
-	battle_ended.emit(result)
+
+
+## Stops every unit and projectile, but lets death fades, popups and flashes finish
+## (disabling the whole World would freeze them mid-animation).
+func _freeze_field() -> void:
+	for node in get_tree().get_nodes_in_group(&"projectiles"):
+		node.queue_free()
+	for node in get_tree().get_nodes_in_group(&"allies"):
+		(node as Combatant).freeze()
+	for node in get_tree().get_nodes_in_group(&"enemies"):
+		if result == Result.VICTORY:
+			(node as Combatant).vanish()  # The army routs once its king falls.
+		else:
+			(node as Combatant).freeze()
+	base.settle(result == Result.DEFEAT)
+
+
+func shake(strength: float, duration: float = 0.25) -> void:
+	if _shake_tween != null and _shake_tween.is_running():
+		return
+	_shake_tween = create_tween()
+	var steps := 6
+	for i in steps:
+		var falloff := 1.0 - float(i) / steps
+		var offset := Vector2(randf_range(-1, 1), randf_range(-1, 1)).round() * strength * falloff
+		_shake_tween.tween_callback(_set_shake_offset.bind(offset))
+		_shake_tween.tween_interval(duration / steps)
+	_shake_tween.tween_callback(_set_shake_offset.bind(Vector2.ZERO))
+
+
+func _set_shake_offset(offset: Vector2) -> void:
+	world.position = offset
+	background.position = offset
 
 
 func _refresh_boss_countdown() -> void:
@@ -218,7 +270,13 @@ func request_upgrade(index: int) -> BattleUpgradeManager.Reason:
 
 func retry() -> void:
 	get_tree().paused = false
-	get_tree().reload_current_scene()
+	# Deferred: this runs from a button press, which must finish before its scene goes.
+	get_tree().reload_current_scene.call_deferred()
+
+
+func go_to_title() -> void:
+	get_tree().paused = false
+	get_tree().change_scene_to_file.call_deferred(TITLE_SCENE)
 
 
 func set_paused(paused: bool) -> void:
@@ -307,6 +365,7 @@ func _refresh_summon_ui() -> void:
 
 func _on_base_damaged(_amount: int) -> void:
 	battle_ui.flash_damage()
+	shake(2.0, 0.15)
 
 
 func _update_layout() -> void:

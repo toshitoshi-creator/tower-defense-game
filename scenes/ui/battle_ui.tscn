@@ -282,3 +282,10 @@ layout_mode = 2
 focus_mode = 0
 theme_override_font_sizes/font_size = 22
 text = "再開"
+
+[node name="TitleButton" type="Button" parent="PauseOverlay/Center/Column"]
+custom_minimum_size = Vector2(200, 52)
+layout_mode = 2
+focus_mode = 0
+theme_override_font_sizes/font_size = 18
+text = "タイトルに戻る"

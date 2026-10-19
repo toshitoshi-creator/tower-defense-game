@@ -3,6 +3,7 @@ extends CanvasLayer
 ## End-of-battle screen. Phase 1 shows the outcome, time, kills and a retry button.
 
 signal retry_requested
+signal title_requested
 
 @onready var panel: Control = $Dim
 @onready var title_label: Label = $Dim/Center/Panel/Column/TitleLabel
@@ -11,6 +12,7 @@ signal retry_requested
 @onready var coins_label: Label = $Dim/Center/Panel/Column/CoinsLabel
 @onready var boss_label: Label = $Dim/Center/Panel/Column/BossLabel
 @onready var retry_button: Button = $Dim/Center/Panel/Column/RetryButton
+@onready var title_button: Button = $Dim/Center/Panel/Column/TitleButton
 
 var shown_count: int = 0
 
@@ -18,6 +20,7 @@ var shown_count: int = 0
 func _ready() -> void:
 	panel.visible = false
 	retry_button.pressed.connect(retry_requested.emit)
+	title_button.pressed.connect(title_requested.emit)
 
 
 func show_result(victory: bool, stats: Dictionary) -> void:
@@ -31,3 +34,11 @@ func show_result(victory: bool, stats: Dictionary) -> void:
 	boss_label.text = "中ボス撃破  %d / %d\n最終ボス  %s" % [stats.get("mid_bosses_defeated", 0),
 			stats.get("mid_bosses_total", 0), "撃破" if stats.get("final_boss_defeated", false) else "未撃破"]
 	panel.visible = true
+	# Pop the panel in.
+	var box: Control = $Dim/Center/Panel
+	box.pivot_offset = box.size * 0.5
+	box.scale = Vector2(0.8, 0.8)
+	box.modulate.a = 0.0
+	var tween := create_tween().set_parallel()
+	tween.tween_property(box, "scale", Vector2.ONE, 0.2).set_trans(Tween.TRANS_BACK)
+	tween.tween_property(box, "modulate:a", 1.0, 0.15)

@@ -1,0 +1,81 @@
+[gd_scene load_steps=4 format=3]
+
+[ext_resource type="Script" path="res://scripts/title/title_screen.gd" id="1_title"]
+[ext_resource type="Script" path="res://scripts/battle/battlefield_background.gd" id="2_bg"]
+
+[sub_resource type="StyleBoxFlat" id="start_button"]
+bg_color = Color(0.78, 0.33, 0.18, 1)
+border_width_left = 3
+border_width_top = 3
+border_width_right = 3
+border_width_bottom = 6
+border_color = Color(0.08, 0.05, 0.05, 1)
+corner_radius_top_left = 6
+corner_radius_top_right = 6
+corner_radius_bottom_right = 6
+corner_radius_bottom_left = 6
+
+[node name="Title" type="Control"]
+layout_mode = 3
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+script = ExtResource("1_title")
+
+[node name="Backdrop" type="Node2D" parent="."]
+modulate = Color(0.55, 0.6, 0.55, 1)
+script = ExtResource("2_bg")
+
+[node name="Margin" type="MarginContainer" parent="."]
+layout_mode = 1
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+
+[node name="Column" type="VBoxContainer" parent="Margin"]
+layout_mode = 2
+theme_override_constants/separation = 20
+alignment = 1
+
+[node name="TitleLabel" type="Label" parent="Margin/Column"]
+layout_mode = 2
+theme_override_colors/font_color = Color(1, 0.85, 0.35, 1)
+theme_override_constants/outline_size = 10
+theme_override_font_sizes/font_size = 48
+text = "ピクセル防衛戦"
+horizontal_alignment = 1
+
+[node name="Subtitle" type="Label" parent="Margin/Column"]
+layout_mode = 2
+theme_override_font_sizes/font_size = 18
+text = "5分間 陣地を守りぬけ！"
+horizontal_alignment = 1
+
+[node name="Lineup" type="HBoxContainer" parent="Margin/Column"]
+layout_mode = 2
+theme_override_constants/separation = 10
+alignment = 1
+
+[node name="StartButton" type="Button" parent="Margin/Column"]
+custom_minimum_size = Vector2(240, 72)
+layout_mode = 2
+size_flags_horizontal = 4
+focus_mode = 0
+theme_override_font_sizes/font_size = 30
+theme_override_styles/normal = SubResource("start_button")
+theme_override_styles/hover = SubResource("start_button")
+theme_override_styles/pressed = SubResource("start_button")
+text = "スタート"
+
+[node name="HowTo" type="Label" parent="Margin/Column"]
+layout_mode = 2
+theme_override_font_sizes/font_size = 16
+text = "・下のボタンで味方を召喚
+・敵を倒してコインをかせぐ
+・「強化」で軍と陣地をパワーアップ
+・5分後に現れる魔王を倒せば勝利"
+horizontal_alignment = 1

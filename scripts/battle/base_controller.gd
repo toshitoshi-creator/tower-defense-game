@@ -54,6 +54,13 @@ func add_max_hp(amount: int) -> void:
 	hp_changed.emit(hp, max_hp)
 
 
+## Battle over: end any flash; a fallen wall stays darkened.
+func settle(fallen: bool) -> void:
+	if _flash_tween != null:
+		_flash_tween.kill()
+	modulate = Color(0.5, 0.45, 0.45) if fallen else Color.WHITE
+
+
 ## Green pulse when durability is upgraded.
 func play_upgrade_flash() -> void:
 	if _flash_tween != null:

@@ -7,6 +7,7 @@ extends CanvasLayer
 
 signal pause_requested
 signal resume_requested
+signal title_requested
 signal summon_slot_pressed(slot: int)
 signal upgrade_pressed(index: int)
 ## Emitted when the HUD's size or safe-area margins change, so the field can re-layout.
@@ -32,6 +33,7 @@ signal layout_changed
 @onready var damage_flash: ColorRect = $DamageFlash
 @onready var pause_overlay: Control = $PauseOverlay
 @onready var resume_button: Button = $PauseOverlay/Center/Column/ResumeButton
+@onready var title_button: Button = $PauseOverlay/Center/Column/TitleButton
 
 const SUMMON_BUTTON_SCENE := preload("res://scenes/ui/summon_button.tscn")
 const UPGRADE_BUTTON_SCENE := preload("res://scenes/ui/upgrade_button.tscn")
@@ -47,6 +49,7 @@ var _banner_tween: Tween
 func _ready() -> void:
 	pause_button.pressed.connect(pause_requested.emit)
 	resume_button.pressed.connect(resume_requested.emit)
+	title_button.pressed.connect(title_requested.emit)
 	upgrade_toggle.toggled.connect(set_upgrade_panel_open)
 	bottom_panel.resized.connect(_place_upgrade_panel)
 	top_bar.resized.connect(layout_changed.emit)

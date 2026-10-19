@@ -106,6 +106,10 @@ func _ally(at: Vector2, data: UnitData = SOLDIER) -> UnitBase:
 	return _battle.summoner.summon(data, at)
 
 
+func _wait_result(b: BattleManager) -> void:
+	await _seconds(b.result_delay + 0.3)
+
+
 func _count(group: StringName) -> int:
 	return get_node_count_in_group(group)
 
@@ -254,8 +258,11 @@ func test_base_zero_hp_is_defeat_and_stops_battle() -> void:
 	await _frames(2)
 	_check(b.phase == BattleManager.Phase.ENDED, "battle ended")
 	_check(b.result == BattleManager.Result.DEFEAT, "result is defeat")
-	_check(b.result_ui.shown_count == 1 and b.result_ui.panel.visible, "result shown once")
 	_check(ended[0] == 1, "battle_ended emitted once")
+	_check(not b.result_ui.panel.visible, "result panel waits so the moment is visible")
+	await _wait_result(b)
+	_check(b.result_ui.shown_count == 1 and b.result_ui.panel.visible, "result shown once")
+	_check(b.base.modulate == Color(0.5, 0.45, 0.45), "fallen wall settles darkened, not stuck mid-flash")
 	# Everything must be frozen now.
 	var time_at_end := b.clock.elapsed
 	var enemy_pos := enemy.position
@@ -810,6 +817,9 @@ func test_killing_final_boss_wins_and_stops_battle() -> void:
 	_check(b.phase == BattleManager.Phase.ENDED and b.result == BattleManager.Result.VICTORY, "victory")
 	_check(b.final_boss_defeated, "final boss recorded")
 	_check(b.wallet.coins - coins == 300, "final boss pays 300 (%d)" % (b.wallet.coins - coins))
+	_check(_count(&"enemies") == 0, "remaining enemies rout after the final boss falls")
+	_check(b.wallet.coins - coins == 300 and b.kills == 1, "routing enemies give no coins or kills")
+	await _wait_result(b)
 	_check(b.result_ui.shown_count == 1 and b.result_ui.title_label.text == "勝利！", "victory screen once")
 	_check(b.result_ui.boss_label.text.contains("最終ボス  撃破"), "result lists final boss defeated: %s" % b.result_ui.boss_label.text)
 	var enemies := _count(&"enemies")
@@ -850,12 +860,115 @@ func test_allies_target_big_units_by_edge_distance() -> void:
 	_check(ally.target == boss, "ally attacks the ogre whose edge is closer")
 
 
+func test_battle_end_lets_animations_finish() -> void:
+	var b := await _start_battle()
+	var dying := _enemy(Vector2(100, 300))
+	var survivor := _ally(Vector2(300, 600))
+	_ally(Vector2(100, 340), ARCHER)
+	await _seconds(0.8)
+	dying.take_damage(9999)
+	b.base.take_damage(b.base.hp)
+	await _frames(2)
+	_check(_count(&"projectiles") == 0, "arrows in flight are removed at the end")
+	await _seconds(1.0)
+	_check(not is_instance_valid(dying), "a unit that was dying finishes its death and is freed")
+	_check(is_instance_valid(survivor) and survivor.state == Combatant.State.IDLE, "survivors stand idle")
+	_check(not survivor.is_physics_processing(), "survivors no longer act")
+
+
+func test_generated_sprites_have_every_animation() -> void:
+	for data in [SOLDIER, ARCHER, SHIELD, GRUNT, BRUTE, OGRE, DEMON_KING]:
+		var frames := PixelArt.build_sprite_frames(data)
+		for anim in [&"idle", &"move", &"attack", &"hurt", &"death"]:
+			_check(frames.has_animation(anim) and frames.get_frame_count(anim) > 0,
+					"%s has %s" % [(data as UnitData).id, anim])
+		_check(frames.get_animation_loop(&"move") and not frames.get_animation_loop(&"death"), "loop flags")
+		_check(PixelArt.build_sprite_frames(data) == frames, "frames are cached per unit look")
+		var tex := frames.get_frame_texture(&"idle", 0)
+		var rows := PixelArt.get_rows((data as UnitData).placeholder_pattern)
+		_check(tex.get_width() == (rows[0] as String).length() + 2 and tex.get_height() == rows.size() + 2,
+				"%s texture is 1 texel per pattern pixel + margin" % (data as UnitData).id)
+
+
+func test_unit_animation_follows_state() -> void:
+	var b := await _start_battle()
+	var ally := _ally(Vector2(195, b.layout.ally_spawn_y))
+	await _frames(5)
+	_check(ally._visual.get_current_animation() == &"move", "walking unit plays move")
+	var enemy := _enemy(Vector2(195, b.layout.ally_spawn_y - 40))
+	enemy.data = GRUNT.duplicate()
+	enemy.data.move_speed = 0.0
+	var saw_attack := false
+	for i in 90:
+		await physics_frame
+		saw_attack = saw_attack or ally._visual.get_current_animation() == &"attack"
+	_check(saw_attack, "attacking unit plays attack")
+	enemy.take_damage(9999)
+	await _frames(2)
+	_check(enemy._visual.get_current_animation() == &"death", "dead unit plays death")
+
+
+func test_effects_are_capped() -> void:
+	var b := await _start_battle()
+	for i in 200:
+		PixelBurst.spawn(b.effects, Vector2(100, 100), Color.WHITE)
+		FloatingText.spawn(b.effects, Vector2(100, 100), "1", Color.WHITE)
+	var bursts := 0
+	var texts := 0
+	for child in b.effects.get_children():
+		bursts += 1 if child is PixelBurst else 0
+		texts += 1 if child is FloatingText else 0
+	_check(bursts <= PixelBurst.MAX_ACTIVE and texts <= FloatingText.MAX_ACTIVE,
+			"bursts %d / texts %d within caps" % [bursts, texts])
+
+
+func test_title_screen_starts_battle_and_result_returns_to_title() -> void:
+	# Real scene flow: title -> battle -> result -> title.
+	change_scene_to_file("res://scenes/title/title.tscn")
+	await _frames(3)
+	var title := current_scene
+	_check(title != null and title.name == "Title", "title scene loaded")
+	var start: Button = title.get_node("Margin/Column/StartButton")
+	_check(get_root().get_visible_rect().encloses(start.get_global_rect()), "start button on screen")
+	_check(start.size.y >= 48.0, "start button is a big tap target")
+	await _tap(start.get_global_rect().get_center())
+	await _frames(3)
+	var b := current_scene as BattleManager
+	_check(b != null and b.phase == BattleManager.Phase.RUNNING, "tapping start begins a battle")
+	if b == null:
+		return
+	_battle = b
+	b.base.take_damage(b.base.hp)
+	await _frames(2)
+	await _wait_result(b)
+	await _tap(b.result_ui.title_button.get_global_rect().get_center())
+	await _frames(3)
+	_check(current_scene != null and current_scene.name == "Title", "result screen returns to title")
+	_check(not paused, "title is not paused")
+	_battle = null
+	current_scene.queue_free()
+	await _frames(2)
+
+
+func test_pause_menu_can_return_to_title() -> void:
+	var b := await _start_battle()
+	b.set_paused(true)
+	b.battle_ui.title_button.pressed.emit()
+	await _frames(3)
+	_check(current_scene != null and current_scene.name == "Title", "pause menu returns to title")
+	_check(not paused, "tree unpaused after leaving")
+	_battle = null
+	current_scene.queue_free()
+	await _frames(2)
+
+
 func test_victory_beats_defeat_in_same_frame() -> void:
 	var b := await _start_battle()
 	b.base.take_damage(b.base.hp)
 	b.notify_final_boss_defeated()
 	await _frames(2)
 	_check(b.result == BattleManager.Result.VICTORY, "victory has priority")
+	await _wait_result(b)
 	_check(b.result_ui.shown_count == 1, "result shown once")
 	await _teardown()
 	b = await _start_battle()
@@ -863,6 +976,7 @@ func test_victory_beats_defeat_in_same_frame() -> void:
 	b.base.take_damage(b.base.hp)
 	await _frames(2)
 	_check(b.result == BattleManager.Result.VICTORY, "victory has priority (reverse order)")
+	await _wait_result(b)
 	_check(b.result_ui.shown_count == 1, "result shown once (reverse order)")
 
 

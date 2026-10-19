@@ -35,8 +35,10 @@ echo "== 3. unit/integration tests"
 grep -q "RESULT: .* 0 failed" /tmp/td_tests.log || fail=1
 grep -E "SCRIPT ERROR|^ERROR|^WARNING" /tmp/td_tests.log && fail=1
 
-echo "== 4. main scene smoke run (3 min of game time)"
-out=$("$GODOT" --headless --path . --fixed-fps 60 --quit-after 10800 2>&1)
+echo "== 4. smoke runs: title screen (main scene), then a battle left running for 3 min of game time"
+out=$("$GODOT" --headless --path . --fixed-fps 60 --quit-after 600 2>&1)
+echo "$out" | grep -E "SCRIPT ERROR|ERROR|WARNING" && fail=1
+out=$("$GODOT" --headless --path . --fixed-fps 60 --quit-after 10800 res://scenes/battle/battle.tscn 2>&1)
 echo "$out" | grep -E "SCRIPT ERROR|ERROR|WARNING" && fail=1
 
 if [ $fail -eq 0 ]; then echo "ALL CHECKS PASSED"; else echo "CHECKS FAILED"; fi

@@ -17,6 +17,10 @@ var _lifetime: float = 0.0
 var _done: bool = false
 
 
+func _ready() -> void:
+	add_to_group(&"projectiles")
+
+
 func launch(from: Vector2, to: Combatant, raw_damage: int, flight_speed: float, shooter: Node) -> void:
 	global_position = from
 	target = to
