@@ -1,0 +1,67 @@
+[gd_scene load_steps=3 format=3]
+
+[ext_resource type="Script" path="res://scripts/ui/result_ui.gd" id="1_result"]
+
+[sub_resource type="StyleBoxFlat" id="dim"]
+bg_color = Color(0, 0, 0, 0.65)
+
+[node name="ResultUI" type="CanvasLayer"]
+process_mode = 3
+layer = 10
+script = ExtResource("1_result")
+
+[node name="Dim" type="Panel" parent="."]
+layout_mode = 3
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+theme_override_styles/panel = SubResource("dim")
+
+[node name="Center" type="CenterContainer" parent="Dim"]
+layout_mode = 1
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+
+[node name="Panel" type="PanelContainer" parent="Dim/Center"]
+custom_minimum_size = Vector2(280, 0)
+layout_mode = 2
+
+[node name="Column" type="VBoxContainer" parent="Dim/Center/Panel"]
+layout_mode = 2
+theme_override_constants/separation = 12
+
+[node name="TitleLabel" type="Label" parent="Dim/Center/Panel/Column"]
+layout_mode = 2
+theme_override_font_sizes/font_size = 40
+text = "敗北…"
+horizontal_alignment = 1
+
+[node name="TimeLabel" type="Label" parent="Dim/Center/Panel/Column"]
+layout_mode = 2
+theme_override_font_sizes/font_size = 20
+text = "戦闘時間  00:00"
+horizontal_alignment = 1
+
+[node name="KillsLabel" type="Label" parent="Dim/Center/Panel/Column"]
+layout_mode = 2
+theme_override_font_sizes/font_size = 20
+text = "撃破数  0"
+horizontal_alignment = 1
+
+[node name="BossLabel" type="Label" parent="Dim/Center/Panel/Column"]
+layout_mode = 2
+theme_override_font_sizes/font_size = 20
+text = "ボス撃破  0"
+horizontal_alignment = 1
+
+[node name="RetryButton" type="Button" parent="Dim/Center/Panel/Column"]
+custom_minimum_size = Vector2(0, 56)
+layout_mode = 2
+focus_mode = 0
+theme_override_font_sizes/font_size = 22
+text = "リトライ"

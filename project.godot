@@ -1,0 +1,37 @@
+; Engine configuration file.
+; Godot 4.3+
+
+config_version=5
+
+[application]
+
+config/name="Pixel Tower Defense"
+config/description="縦型ピクセルアート・タワーディフェンス"
+run/main_scene="res://scenes/battle/battle.tscn"
+config/features=PackedStringArray("4.3", "GL Compatibility")
+
+[display]
+
+window/size/viewport_width=390
+window/size/viewport_height=844
+window/size/window_width_override=390
+window/size/window_height_override=844
+window/stretch/mode="canvas_items"
+window/stretch/aspect="expand"
+window/handheld/orientation=1
+
+[input_devices]
+
+pointing/emulate_touch_from_mouse=true
+
+[gui]
+
+theme/custom="res://resources/ui_theme.tres"
+
+[rendering]
+
+textures/canvas_textures/default_texture_filter=0
+renderer/rendering_method="gl_compatibility"
+renderer/rendering_method.mobile="gl_compatibility"
+2d/snap/snap_2d_transforms_to_pixel=true
+environment/defaults/default_clear_color=Color(0.11, 0.13, 0.1, 1)

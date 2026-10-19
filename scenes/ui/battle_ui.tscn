@@ -1,0 +1,176 @@
+[gd_scene load_steps=5 format=3]
+
+[ext_resource type="Script" path="res://scripts/ui/battle_ui.gd" id="1_ui"]
+
+[sub_resource type="StyleBoxFlat" id="hp_bg"]
+bg_color = Color(0.12, 0.05, 0.05, 1)
+border_width_left = 2
+border_width_top = 2
+border_width_right = 2
+border_width_bottom = 2
+border_color = Color(0.03, 0.03, 0.05, 1)
+
+[sub_resource type="StyleBoxFlat" id="hp_fill"]
+bg_color = Color(0.3, 0.78, 0.36, 1)
+border_width_left = 2
+border_width_top = 2
+border_width_right = 2
+border_width_bottom = 2
+border_color = Color(0.03, 0.03, 0.05, 0)
+
+[sub_resource type="StyleBoxFlat" id="dim"]
+bg_color = Color(0, 0, 0, 0.6)
+
+[node name="BattleUI" type="CanvasLayer"]
+layer = 5
+script = ExtResource("1_ui")
+
+[node name="DamageFlash" type="ColorRect" parent="."]
+layout_mode = 3
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+mouse_filter = 2
+color = Color(1, 0.1, 0.1, 0)
+
+[node name="Root" type="Control" parent="."]
+layout_mode = 3
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+mouse_filter = 2
+
+[node name="TopBar" type="PanelContainer" parent="Root"]
+layout_mode = 1
+anchors_preset = 10
+anchor_right = 1.0
+offset_bottom = 56.0
+grow_horizontal = 2
+mouse_filter = 2
+
+[node name="Row" type="HBoxContainer" parent="Root/TopBar"]
+layout_mode = 2
+theme_override_constants/separation = 8
+
+[node name="StageLabel" type="Label" parent="Root/TopBar/Row"]
+layout_mode = 2
+size_flags_horizontal = 3
+text = "STAGE 1"
+vertical_alignment = 1
+
+[node name="TimeLabel" type="Label" parent="Root/TopBar/Row"]
+layout_mode = 2
+size_flags_horizontal = 3
+theme_override_font_sizes/font_size = 26
+text = "00:00"
+horizontal_alignment = 1
+vertical_alignment = 1
+
+[node name="KillsLabel" type="Label" parent="Root/TopBar/Row"]
+layout_mode = 2
+size_flags_horizontal = 3
+text = "撃破 0"
+horizontal_alignment = 2
+vertical_alignment = 1
+
+[node name="PauseButton" type="Button" parent="Root/TopBar/Row"]
+custom_minimum_size = Vector2(48, 44)
+layout_mode = 2
+focus_mode = 0
+text = "II"
+
+[node name="BottomPanel" type="PanelContainer" parent="Root"]
+layout_mode = 1
+anchors_preset = 12
+anchor_top = 1.0
+anchor_right = 1.0
+anchor_bottom = 1.0
+offset_top = -84.0
+grow_horizontal = 2
+grow_vertical = 0
+mouse_filter = 2
+
+[node name="Column" type="VBoxContainer" parent="Root/BottomPanel"]
+layout_mode = 2
+theme_override_constants/separation = 6
+
+[node name="BaseRow" type="HBoxContainer" parent="Root/BottomPanel/Column"]
+layout_mode = 2
+
+[node name="BaseHpBar" type="ProgressBar" parent="Root/BottomPanel/Column/BaseRow"]
+custom_minimum_size = Vector2(0, 30)
+layout_mode = 2
+size_flags_horizontal = 3
+mouse_filter = 2
+theme_override_styles/background = SubResource("hp_bg")
+theme_override_styles/fill = SubResource("hp_fill")
+max_value = 1000.0
+step = 1.0
+value = 1000.0
+show_percentage = false
+
+[node name="BaseHpLabel" type="Label" parent="Root/BottomPanel/Column/BaseRow/BaseHpBar"]
+layout_mode = 1
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+text = "陣地 1000 / 1000"
+horizontal_alignment = 1
+vertical_alignment = 1
+
+[node name="InfoLabel" type="Label" parent="Root/BottomPanel/Column"]
+layout_mode = 2
+theme_override_colors/font_color = Color(0.8, 0.8, 0.75, 1)
+theme_override_font_sizes/font_size = 14
+text = "フェーズ1：味方は自動で出撃します"
+horizontal_alignment = 1
+autowrap_mode = 3
+
+[node name="PauseOverlay" type="Control" parent="."]
+process_mode = 3
+layout_mode = 3
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+
+[node name="Dim" type="Panel" parent="PauseOverlay"]
+layout_mode = 1
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+theme_override_styles/panel = SubResource("dim")
+
+[node name="Center" type="CenterContainer" parent="PauseOverlay"]
+layout_mode = 1
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+
+[node name="Column" type="VBoxContainer" parent="PauseOverlay/Center"]
+layout_mode = 2
+theme_override_constants/separation = 20
+
+[node name="Title" type="Label" parent="PauseOverlay/Center/Column"]
+layout_mode = 2
+theme_override_font_sizes/font_size = 32
+text = "一時停止中"
+horizontal_alignment = 1
+
+[node name="ResumeButton" type="Button" parent="PauseOverlay/Center/Column"]
+custom_minimum_size = Vector2(200, 56)
+layout_mode = 2
+focus_mode = 0
+theme_override_font_sizes/font_size = 22
+text = "再開"
