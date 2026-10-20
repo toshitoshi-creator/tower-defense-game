@@ -2,7 +2,7 @@ class_name UnitBase
 extends Combatant
 ## Player-side unit. Positioning depends on UnitData.role (see UnitData.Role):
 ## - ASSAULT (soldier): fights whatever is in aggro range; otherwise goes out to meet the
-##   enemy closest to the base once it has crossed the front line (layout.assault_limit_y);
+##   nearest enemy that has crossed the front line (layout.assault_limit_y);
 ##   with nothing to fight it returns to the rally point in front of the base.
 ## - GUARD (shield): holds a post on the defense line (posts are spread evenly across
 ##   the width); engages enemies near its post or enemies attacking a nearby ally.
@@ -17,15 +17,17 @@ const PROTECT_RADIUS := 150.0
 const GUARD_LEASH := 190.0
 ## Support units stand this far behind the engaged assault units.
 const SUPPORT_BEHIND := 70.0
-## Units gathered at a home point spread out this much so they don't stack.
-const HOME_SPREAD := 70.0
+## How much of their idle spread archers keep while gathered behind a fight.
+const SUPPORT_SPREAD := 0.35
 const ARRIVE_DISTANCE := 3.0
+## A role's idle line splits into two staggered rows above this many units.
+const MAX_PER_ROW := 8
+const ROW_GAP := 20.0
 
 ## Character level bonus (gacha duplicates), multiplied into HP and attack.
 var level_bonus: float = 1.0
 
 var _hunting: bool = false
-var _home_offset: Vector2 = Vector2.ZERO
 ## Where this unit stands when it has nothing in reach (refreshed at retarget time).
 var _station: Vector2 = Vector2.ZERO
 
@@ -35,7 +37,6 @@ func setup_ally(unit_data: UnitData, battle_layout: BattleLayout, effects_layer:
 	level_bonus = character_bonus
 	setup(unit_data, Team.ALLY, battle_layout, effects_layer,
 			hp_multiplier * level_bonus, attack_multiplier * level_bonus)
-	_home_offset = Vector2(randf_range(-HOME_SPREAD, HOME_SPREAD), randf_range(-12.0, 12.0))
 
 
 func get_station() -> Vector2:
@@ -63,10 +64,7 @@ func _find_target() -> Combatant:
 	_hunting = local == null
 	if local != null:
 		return local
-	var advanced := _find_most_advanced_enemy()
-	if advanced != null and advanced.position.y >= layout.assault_limit_y:
-		return advanced
-	return null
+	return _find_nearest_past_front_line()
 
 
 func _is_valid_target(candidate: Combatant) -> bool:
@@ -106,20 +104,22 @@ func _go_to(point: Vector2, delta: float) -> void:
 	position += to_point.limit_length(data.move_speed * delta)
 
 
+## Idle positions: every role spreads evenly across the width on its own line
+## (soldiers in front, then shields, archers nearest the wall).
 func _compute_station() -> Vector2:
-	var center := layout.center_x()
+	var slot := _line_slot()
 	match data.role:
 		UnitData.Role.GUARD:
-			return Vector2(_guard_post_x(), layout.guard_y)
+			return Vector2(slot.x, layout.guard_y + slot.y)
 		UnitData.Role.SUPPORT:
 			var line := _engaged_assault_center()
 			if is_nan(line.y):
-				return Vector2(layout.clamp_x(center + _home_offset.x * 1.6, 20.0),
-						layout.archer_home_y + _home_offset.y * 0.5)
-			# Line up behind where the soldiers are actually fighting.
-			return Vector2(layout.clamp_x(line.x + _home_offset.x * 0.6, 20.0),
+				return Vector2(slot.x, layout.archer_home_y + slot.y)
+			# Gather behind the fighting soldiers (concentrated fire), keeping each
+			# archer's left-to-right order from its line slot so they don't stack.
+			return Vector2(layout.clamp_x(line.x + (slot.x - layout.center_x()) * SUPPORT_SPREAD, 16.0),
 					clampf(line.y + SUPPORT_BEHIND, layout.archer_limit_y, layout.archer_home_y))
-	return Vector2(layout.clamp_x(center + _home_offset.x, 20.0), layout.rally_y + _home_offset.y)
+	return Vector2(slot.x, layout.rally_y + slot.y)
 
 
 ## Average position of assault allies currently fighting, or (NAN, NAN) when none are.
@@ -135,19 +135,27 @@ func _engaged_assault_center() -> Vector2:
 	return total / count if count > 0 else Vector2(NAN, NAN)
 
 
-## Guards share the defense line evenly, ordered by creation.
-func _guard_post_x() -> float:
+## This unit's place on its role's line: x spread evenly across the width (ordered by
+## creation), y offset for a second staggered row when the line gets crowded.
+func _line_slot() -> Vector2:
 	var index := 0
 	var count := 0
 	for node in get_tree().get_nodes_in_group(&"allies"):
 		var ally := node as UnitBase
-		if ally == null or not ally.is_alive() or ally.data.role != UnitData.Role.GUARD:
+		if ally == null or not ally.is_alive() or ally.data.role != data.role:
 			continue
 		if ally.get_instance_id() < get_instance_id():
 			index += 1
 		count += 1
+	var rows := 2 if count > MAX_PER_ROW else 1
+	var row := index % rows
+	var columns := ceili(float(count) / rows)
+	var column := floori(float(index) / rows)
 	var width := layout.right - layout.left
-	return layout.left + width * (index + 1) / (count + 1)
+	var x := layout.left + width * (column + 1) / (columns + 1)
+	if rows == 2 and row == 1:
+		x += width / (columns + 1) * 0.5  # Stagger the back row between the front ones.
+	return Vector2(layout.clamp_x(x, 16.0), (row - (rows - 1) * 0.5) * ROW_GAP)
 
 
 func _find_guard_target() -> Combatant:
@@ -190,10 +198,17 @@ func _find_heal_target() -> Combatant:
 	return best
 
 
-func _find_most_advanced_enemy() -> Combatant:
+## The enemy closest to this unit among those that crossed the front line, so a
+## spread-out line answers threats on its own side instead of converging on one.
+func _find_nearest_past_front_line() -> Combatant:
 	var best: Combatant = null
+	var best_dist := INF
 	for node in get_tree().get_nodes_in_group(get_opponent_group()):
 		var other := node as Combatant
-		if other != null and other.is_alive() and (best == null or other.position.y > best.position.y):
+		if other == null or not other.is_alive() or other.position.y < layout.assault_limit_y:
+			continue
+		var dist := global_position.distance_to(other.global_position)
+		if dist < best_dist:
+			best_dist = dist
 			best = other
 	return best

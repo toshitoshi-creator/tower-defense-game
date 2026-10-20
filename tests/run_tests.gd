@@ -160,7 +160,7 @@ func test_soldier_returns_to_rally_point_when_field_is_clear() -> void:
 	var soldier := _ally(Vector2(60, b.layout.spawn_y + 60.0))
 	await _seconds(12.0)
 	var rally := Vector2(b.layout.center_x(), b.layout.rally_y)
-	_check(soldier.position.distance_to(rally) <= UnitBase.HOME_SPREAD + 15.0,
+	_check(soldier.position.distance_to(rally) <= 20.0,
 			"soldier gathers near the base center (%s vs %s)" % [soldier.position, rally])
 	_check(soldier.state == Combatant.State.IDLE, "soldier idles once home")
 	# It goes out to fight, then comes back.
@@ -168,7 +168,7 @@ func test_soldier_returns_to_rally_point_when_field_is_clear() -> void:
 	far_enemy.data = GRUNT.duplicate()
 	far_enemy.data.move_speed = 0.0
 	await _seconds(2.0)
-	_check(soldier.position.distance_to(rally) <= UnitBase.HOME_SPREAD + 15.0,
+	_check(soldier.position.distance_to(rally) <= 20.0,
 			"soldier waits while the enemy is beyond the front line")
 	far_enemy.take_damage(9999)
 	var enemy := _enemy(Vector2(195, b.layout.assault_limit_y + 30.0))
@@ -176,7 +176,7 @@ func test_soldier_returns_to_rally_point_when_field_is_clear() -> void:
 	_check(soldier.position.y < rally.y - 100.0, "soldier advances to meet an enemy past the front line")
 	enemy.take_damage(9999)
 	await _seconds(12.0)
-	_check(soldier.position.distance_to(rally) <= UnitBase.HOME_SPREAD + 15.0, "soldier returns after the kill")
+	_check(soldier.position.distance_to(rally) <= 20.0, "soldier returns after the kill")
 
 
 func test_enemy_stops_at_base_line() -> void:
@@ -201,6 +201,50 @@ func test_shields_hold_evenly_spread_posts_on_the_defense_line() -> void:
 	var w := b.layout.right - b.layout.left
 	_check(absf(xs[0] - w * 0.25) < 4 and absf(xs[1] - w * 0.5) < 4 and absf(xs[2] - w * 0.75) < 4,
 			"posts at 1/4, 1/2, 3/4 of the width: %s" % [xs])
+
+
+func test_idle_soldiers_and_archers_spread_across_the_width() -> void:
+	var b := await _start_battle()
+	var soldiers: Array[UnitBase] = []
+	var archers: Array[UnitBase] = []
+	for i in 4:
+		soldiers.append(_ally(Vector2(195, b.layout.ally_spawn_y)))
+	for i in 3:
+		archers.append(_ally(Vector2(195, b.layout.ally_spawn_y), ARCHER))
+	await _seconds(9.0)
+	var w := b.layout.right - b.layout.left
+	for group in [[soldiers, b.layout.rally_y, "soldier"], [archers, b.layout.archer_home_y, "archer"]]:
+		var units: Array = group[0]
+		var xs := []
+		for u in units:
+			_check(absf((u as UnitBase).position.y - group[1]) < 4.0, "%s on its line" % group[2])
+			xs.append((u as UnitBase).position.x)
+		xs.sort()
+		var n := units.size()
+		for i in n:
+			_check(absf(xs[i] - w * (i + 1) / (n + 1)) < 4.0,
+					"%s %d evenly spaced (x=%.0f, want %.0f)" % [group[2], i, xs[i], w * (i + 1) / (n + 1)])
+
+
+func test_crowded_line_splits_into_two_rows_without_stacking() -> void:
+	var b := await _start_battle()
+	var soldiers: Array[UnitBase] = []
+	for i in 12:
+		soldiers.append(_ally(Vector2(40 + i * 25, b.layout.ally_spawn_y)))
+	await _seconds(10.0)
+	var closest := INF
+	for i in soldiers.size():
+		for j in range(i + 1, soldiers.size()):
+			closest = minf(closest, soldiers[i].position.distance_to(soldiers[j].position))
+	_check(closest >= 20.0, "no two soldiers stand on top of each other (closest %.0f px)" % closest)
+	var rows: Array[float] = []
+	for u in soldiers:
+		var found := false
+		for r in rows:
+			found = found or absf(r - u.position.y) <= UnitBase.ARRIVE_DISTANCE + 1.0
+		if not found:
+			rows.append(u.position.y)
+	_check(rows.size() == 2, "two rows (%s)" % [rows])
 
 
 func test_shield_engages_enemies_near_base_and_returns() -> void:
